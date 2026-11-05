@@ -9,7 +9,7 @@ import {PunishmentVFX,EFFECT_FLOORS} from './punishment-vfx';
 import {buildPunishmentGags} from './punishment-gags';
 import {tongueBeat} from './punishment-beats';
 
-export type SoundMood = 'hall'|'wind'|'fire'|'metal'|'ice'|'water'|'stone'|'beast';
+export type SoundMood = 'hall'|'wind'|'fire'|'metal'|'ice'|'water'|'stone'|'beast'|'bar';
 export const FLOORS: { name:string; story:string; joke:string; mood:SoundMood; color:number }[] = [
   {name:'Rút Lưỡi',story:'Lưỡi kéo dài, máu nhỏ xuống. Buông kẹp là quỷ ăn cú bật ngược.',joke:'Khoan! Cho tôi nói thêm một câu…',mood:'metal',color:0x21383d},
   {name:'Kéo Cắt',story:'Quỷ sai cắt tách từng phần hồn rồi gom lại ghép đủ bộ.',joke:'Nhớ ráp đủ giúp tôi. Đừng gửi thiếu mảnh!',mood:'metal',color:0x292b35},
@@ -95,6 +95,7 @@ export function buildVisitZone(id:string,actor:ActorFactory):VisitZone {
     for(let i=0;i<18;i++){const side=i<9?-1:1;const z=6-(i%9)*2.6;const x=side*9.2;const arch=mesh(new T.TorusGeometry(.64,.09,6,24),gold,[x,1.1,z]);arch.scale.y=1.3;label(String(i+1).padStart(2,'0')+' · '+FLOORS[i].name,[x,2.6,z],2.7);actions.push({position:point(x,0,z),radius:1.5,label:`Vào tầng ${i+1} · ${FLOORS[i].name}`,destination:`floor-${i+1}`});}
     for(let i=0;i<5;i++){const p=pose(person((['spirit','spirit-round','traveler-male','spirit-hat','traveler-female'] as const)[i],-2+i*.9,-4.5-(i%2),.8),'plead',1,i*.4);loop(p,(t,o)=>o.position.y=Math.sin(t+i)*.05);}
     portal(0,8,'Về khu ghi danh','registry');
+    portal(5.7,7,'Bar Mạnh Bà · Quỷ Quẩy','bar');
   } else {
     if(!FLOORS[index])throw new Error(`Unknown floor ${id}`);
     label(`${String(index+1).padStart(2,'0')} · ${FLOORS[index].name.toLocaleUpperCase('vi')}`,[0,5.6,-15],8);

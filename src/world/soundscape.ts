@@ -3,6 +3,7 @@ import { MASK_CYCLE_DURATION, MASK_PEEL_STARTS } from './mask-peeling';
 import { STONE_CYCLE_DURATION, STONE_IMPACT_TIME } from './stone-crush';
 import { NECK_CYCLE_DURATION, NECK_BREAK_TIME, NECK_RELEASE_TIME } from './neck-pull';
 import {GAG_SOUNDS} from './punishment-beats';
+import {barSeconds} from '../../shared/bar';
 
 export class Soundscape {
   private context?:AudioContext;
@@ -15,6 +16,7 @@ export class Soundscape {
   private lastStoneTime?:number;
   private lastNeckTime?:number;
   private lastGagTime?:number;
+  private barClockOffset=0;
   enabled=false;
   setMood(mood:SoundMood){this.mood=mood;if(this.enabled)this.startMusic();}
   async enable(){
@@ -27,8 +29,15 @@ export class Soundscape {
   }
   private startMusic(){
     const source=`/audio/music/${this.mood}.m4a`;
-    if(this.music?.getAttribute('src')!==source){this.music?.pause();this.music=new Audio(source);this.music.loop=true;this.music.volume=.25;}
+    if(this.music?.getAttribute('src')!==source){this.music?.pause();this.music=new Audio(source);this.music.loop=true;this.music.volume=this.mood==='bar'?.38:.25;this.music.addEventListener('loadedmetadata',()=>this.syncBarMusic(),{once:true});}
+    this.syncBarMusic();
     void this.music.play().catch(()=>{});
+  }
+  setBarClockOffset(offset:number){this.barClockOffset=offset;this.syncBarMusic();}
+  private syncBarMusic(){
+    if(this.mood!=='bar'||!this.music||!Number.isFinite(this.music.duration))return;
+    const phase=barSeconds(Date.now()+this.barClockOffset);
+    if(Math.abs(this.music.currentTime-phase)>.16)this.music.currentTime=phase;
   }
   setZone(zone:string){this.zone=zone;this.lastCue=-100;this.lastMaskTime=undefined;this.lastStoneTime=undefined;this.lastNeckTime=undefined;this.lastGagTime=undefined;}
   reaction(vowel:'aa'|'oh'|'uu'='aa'){
@@ -42,6 +51,7 @@ export class Soundscape {
     osc.onended=()=>{osc.disconnect();vibrato.disconnect();vibratoGain.disconnect();filters.forEach(({f,gain})=>{f.disconnect();gain.disconnect();});envelope.disconnect();};
   }
   tick(time:number,x:number,z:number,stationTime=time){
+    if(this.zone==='bar')return;
     if(!this.enabled)return;const i=Number(this.zone.replace('floor-',''))-1;
     const gag=GAG_SOUNDS[i+1];
     if(gag){

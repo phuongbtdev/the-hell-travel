@@ -20,6 +20,10 @@ import {PUNISHMENT_MEDIA_REVISION} from './world/review-times';
 import './style.css';
 import './mobile.css';
 import {GameScreen} from './world/screen-layout';
+import {buildBarZone} from './world/bar';
+import {createDanceClips} from './world/dances';
+import {DANCES,isDance,barSeconds,type DanceId} from '../shared/bar';
+import './bar.css';
 
 type RemotePlayerState = { x: number; z: number; yaw: number; moving: boolean; ticket: number;name:string; zone:string;y:number;pitch:number;roll:number;sx:number;sy:number;sz:number;clip:string;experienceStage:string;stageTime:number;escortX:number;escortZ:number;escortYaw:number;escortMoving:boolean;escortClip:string };
 
@@ -28,6 +32,7 @@ const activeMixers = new Set<THREE.AnimationMixer>();
 const riggedActors = new WeakMap<THREE.Group, { mixer: THREE.AnimationMixer; idle?: THREE.AnimationAction; walk?: THREE.AnimationAction; run?: THREE.AnimationAction; greet?: THREE.AnimationAction; current?: THREE.AnimationAction; actions:Map<string,THREE.AnimationAction> }>();
 const gltfLoader = new GLTFLoader();
 const modelPromises = new Map<string, Promise<GLTF>>();
+const danceClipCache=new Map<string,THREE.AnimationClip[]>();
 function attachRiggedModel(actor: THREE.Group, fallback: THREE.Object3D, url: string, targetHeight = 1.8) {
   if (!modelPromises.has(url)) modelPromises.set(url, gltfLoader.loadAsync(url));
   modelPromises.get(url)!.then((gltf) => {
@@ -48,7 +53,8 @@ function attachRiggedModel(actor: THREE.Group, fallback: THREE.Object3D, url: st
     const walkClip = byName(['walk', 'float', 'move']) ?? idleClip;
     const runClip = byName(['run', 'sprint']) ?? walkClip;
     const greetClip = byName(['greet']);
-    const controller = { mixer, idle: idleClip ? mixer.clipAction(idleClip) : undefined, walk: walkClip ? mixer.clipAction(walkClip) : undefined, run: runClip ? mixer.clipAction(runClip) : undefined, greet: greetClip ? mixer.clipAction(greetClip) : undefined, current: undefined as THREE.AnimationAction | undefined, actions:new Map(gltf.animations.map(clip=>[clip.name,mixer.clipAction(clip)])) };
+    if(!danceClipCache.has(url))danceClipCache.set(url,createDanceClips(gltf.scene));
+    const controller = { mixer, idle: idleClip ? mixer.clipAction(idleClip) : undefined, walk: walkClip ? mixer.clipAction(walkClip) : undefined, run: runClip ? mixer.clipAction(runClip) : undefined, greet: greetClip ? mixer.clipAction(greetClip) : undefined, current: undefined as THREE.AnimationAction | undefined, actions:new Map([...gltf.animations,...danceClipCache.get(url)!].map(clip=>[clip.name,mixer.clipAction(clip)])) };
     controller.current = controller.idle; controller.idle?.play(); riggedActors.set(actor, controller);
     activeMixers.add(mixer);
   }).catch((error) => { console.info(`Optional rigged model not loaded: ${url}`, error); });
@@ -86,7 +92,7 @@ camera.position.set(0, 5.6, 15);
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 1.7));
 const gameScreen=new GameScreen($('app'),[
- document.querySelector('.topbar') as HTMLElement,$('travel-nav'),$('zone-description'),$('floor-cinema'),$('guide-bubble'),$('chaos-panel'),$('experience-status'),$('hud'),document.querySelector('.footer') as HTMLElement,$('registration-card'),
+ document.querySelector('.topbar') as HTMLElement,$('travel-nav'),$('zone-description'),$('floor-cinema'),$('guide-bubble'),$('chaos-panel'),$('experience-status'),$('dance-panel'),$('hud'),document.querySelector('.footer') as HTMLElement,$('registration-card'),
 ],({width,height})=>{
  camera.aspect=width/height;camera.updateProjectionMatrix();
  const ratio=Math.min(devicePixelRatio,1.7);
@@ -261,6 +267,8 @@ let mapOpen=false;
 const readVisited=()=>{try{const saved=JSON.parse(localStorage.getItem('underworld.visited')??'[]');return Array.isArray(saved)?saved.filter(n=>Number.isInteger(n)&&n>=1&&n<=18):[];}catch{return [];}};
 const visited = new Set<number>(readVisited());
 let currentZone = 'registry';
+let danceId:DanceId|undefined,barClockOffset=0,danceGroup:'party'|'street'='street',dancePickerOpen=true;
+const barTime=()=>barSeconds(Date.now()+barClockOffset);
 const experience=new PunishmentExperience();
 let experienceRequested=false,requestedExperienceZone='';
 let experienceReplyTimer=0;
@@ -269,12 +277,41 @@ const soloChaos=new ChaosLedger(),chaosEmotes=new Map<string,{kind:ChaosAction;u
 let chaosHeat={value:0,at:0};
 const startAmbient = (zone: string) => {
   const floor=FLOORS[Number(zone.replace('floor-',''))-1];
-  soundscape.setMood(floor?.mood??'hall');
+  soundscape.setMood(zone==='bar'?'bar':floor?.mood??'hall');
 };
-function refreshAudioButtons(){for(const id of ['sound-toggle','sound-hud']){const button=$(id);button.textContent=audioEnabled?'♫':'♪';button.setAttribute('aria-pressed',String(audioEnabled));button.title=audioEnabled?'Tắt nhạc và hiệu ứng':'Bật nhạc và hiệu ứng';}}
+function refreshAudioButtons(){for(const id of ['sound-toggle','sound-hud']){const button=$(id);button.textContent=audioEnabled?'♫':'♪';button.setAttribute('aria-pressed',String(audioEnabled));button.title=audioEnabled?'Tắt nhạc và hiệu ứng':'Bật nhạc và hiệu ứng';}refreshDancePanel();}
 async function toggleAudio() {audioPreferenceChosen=true;audioEnabled = await soundscape.toggle();refreshAudioButtons();}
 async function ensureAudio(){if(!soundscape.enabled){audioEnabled=await soundscape.enable();refreshAudioButtons();}}
 $('sound-toggle').addEventListener('click', toggleAudio); $('sound-hud').addEventListener('click', toggleAudio);
+
+function refreshDancePanel(){
+ const active=DANCES.find(d=>d.id===danceId);
+ $('dance-actions').querySelectorAll<HTMLButtonElement>('button').forEach(button=>{button.setAttribute('aria-pressed',String(button.dataset.dance===danceId));button.hidden=button.dataset.group!==danceGroup;});
+ $('dance-party').setAttribute('aria-pressed',String(danceGroup==='party'));$('dance-street').setAttribute('aria-pressed',String(danceGroup==='street'));
+ document.body.classList.toggle('dance-picker-collapsed',Boolean(danceId&&!dancePickerOpen));
+ $('change-dance').hidden=!danceId;$('change-dance').textContent=dancePickerOpen?'Thu gọn':'Đổi điệu';$('change-dance').setAttribute('aria-expanded',String(dancePickerOpen));
+ ($('stop-dance') as HTMLButtonElement).disabled=!danceId;
+ $('dance-status').textContent=active?`${active.label} · chạm mặt đất để đi tiếp${audioEnabled?'':' · nhấn ♫ để bật nhạc'}`:'Chọn điệu để quẩy · chạm mặt đất để đi tiếp';
+ $('bar-music').setAttribute('aria-pressed',String(audioEnabled));$('bar-music').setAttribute('aria-label',audioEnabled?'Tắt nhạc bar':'Bật nhạc bar');
+}
+function stopDance(){
+ danceId=undefined;dancePickerOpen=true;if(isDance(player.userData.performanceClip))delete player.userData.performanceClip;
+ refreshDancePanel();
+}
+function chooseDance(id:DanceId){
+ if(currentZone!=='bar'||!entered||travelling||mapOpen||registrationOpen||!registered)return;
+ navigator.cancel();keys.clear();subtitles.clear();chaosEmotes.delete(room?localSessionId:'local');
+ danceId=id;dancePickerOpen=false;danceGroup=DANCES.find(d=>d.id===id)!.group;player.userData.performanceClip=id;player.userData.phase=0;player.userData.performanceSpeed=1;refreshDancePanel();
+ if(!audioPreferenceChosen)void ensureAudio();
+}
+for(const dance of DANCES){
+ const button=document.createElement('button');button.type='button';button.dataset.dance=dance.id;button.dataset.group=dance.group;button.setAttribute('aria-pressed','false');
+ const icon=document.createElement('span');icon.textContent=dance.icon;icon.setAttribute('aria-hidden','true');button.append(icon,document.createTextNode(dance.label));
+ button.addEventListener('click',()=>chooseDance(dance.id));$('dance-actions').append(button);
+}
+$('stop-dance').addEventListener('click',stopDance);$('bar-music').addEventListener('click',toggleAudio);refreshDancePanel();
+for(const group of ['party','street'] as const)$(`dance-${group}`).addEventListener('click',()=>{danceGroup=group;refreshDancePanel();});
+$('change-dance').addEventListener('click',()=>{dancePickerOpen=!dancePickerOpen;refreshDancePanel();});
 
 function showToast(message: string) { const toast = $('toast'); toast.textContent = message; toast.classList.add('show'); window.setTimeout(() => toast.classList.remove('show'), 2600); }
 function showGuide(message:string,speaker:Speaker='guide'){subtitles.show([{speaker,text:message}]);}
@@ -302,7 +339,7 @@ $('registration-form').addEventListener('submit',event=>{
   sendRoom('register',{name});registrationTimer=window.setTimeout(()=>{registrationPending=false;($('registration-submit') as HTMLButtonElement).disabled=false;$('registration-error').textContent='Chưa nhận được thẻ. Bấm ghi danh để thử lại nhé.';},5000);
 });
 $('registration-cancel').addEventListener('click',closeRegistration);
-function talkToGuide(){greetActor(guide);const floor=FLOORS[Number(currentZone.replace('floor-',''))-1];showGuide(floor?.joke??(registered?'Bấm mặt đất để đi. Mời ngài ghé Chính Điện hoặc chọn tầng trên bản đồ.':'Bấm nút Ghi danh trên đầu Thư lại ở bàn bên trái, rồi điền tên vong hồn nhé!'));soundscape.cue('bell');}
+function talkToGuide(){greetActor(guide);if(currentZone==='bar'){subtitles.show(zoneDialogue('bar'));return;}const floor=FLOORS[Number(currentZone.replace('floor-',''))-1];showGuide(floor?.joke??(registered?'Bấm mặt đất để đi. Mời ngài ghé Chính Điện hoặc chọn tầng trên bản đồ.':'Bấm nút Ghi danh trên đầu Thư lại ở bàn bên trái, rồi điền tên vong hồn nhé!'));soundscape.cue('bell');}
 function configureWalking(){navigator.setMap(new WalkMap(activeVisit?.bounds??registryBounds,chaosMode?[]:activeVisit?.obstacles??registryObstacles));}
 function activateHotspot(entry:WorldHotspot,action:WorldButton){
   if(!entered||travelling||mapOpen||registrationOpen||experience.active||entry.object?.userData.disposed||action.disabled?.())return;
@@ -313,6 +350,10 @@ function activateHotspot(entry:WorldHotspot,action:WorldButton){
 function rebuildWorldUI(){
   const anchor=(actor:THREE.Object3D)=>()=>{const asset=characterAsset((actor.userData.assetId??'guide') as ActorKind),height=(asset?.height??1.85)*actor.scale.y;return actor.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3(0,height+.25,0));};
   const entries:WorldHotspot[]=[{id:'guide',title:'Tiểu Sai',anchor:anchor(guide),approach:()=>guide.position.clone(),object:guide,range:2.8,priority:10,actions:[{label:'Trò chuyện',run:talkToGuide}]}];
+  if(currentZone==='bar')activeVisit?.root.traverse(object=>{
+    if(object.userData.role==='bartender')entries.push({id:'mengpo',title:'Mạnh Bà',anchor:anchor(object),object,approach:()=>new THREE.Vector3(-4.4,0,-2.2),range:2,showDistance:11,priority:20,actions:[{label:'Chào Mạnh Bà',run:()=>showGuide('Chào vong! Quầy bên này để quên sầu, sàn bên kia để quên đường về. Tội gì cũng phải quẩy chứ!','mengpo')}]});
+    if(object.userData.role==='dj')entries.push({id:'bar-dj',title:'DJ Quỷ Sai',anchor:anchor(object),object,approach:()=>new THREE.Vector3(0,0,-5.7),range:2.0,showDistance:13,priority:15,actions:[{label:'Cùng quẩy tay',run:()=>chooseDance('dance-hands')}]});
+  });
   if(currentZone==='registry'){
     entries.push({id:'clerk',title:'Thư lại tiếp dẫn',anchor:anchor(clerk),approach:()=>new THREE.Vector3(-5.8,0,2.65),object:clerk,range:1.65,priority:30,showDistance:9,actions:[{label:()=>registered?'Xem thẻ hồn':'Ghi danh · nhập tên',run:openRegistration}]});
     entries.push({id:'enter-hall',title:'Lối vào Chính Điện',anchor:()=>new THREE.Vector3(0,3,-29),approach:()=>new THREE.Vector3(0,0,-27),range:3,showDistance:10,priority:8,actions:[{label:'Vào Chính Điện',run:()=>travelTo('hall')}]});
@@ -339,6 +380,7 @@ function rebuildWorldUI(){
 function readScene(){
   if(experience.active)return;
   navigator.cancel();
+  if(currentZone==='bar'){subtitles.show(zoneDialogue('bar'));return;}
   if(currentZone==='hall'){subtitles.show(judgeVerdict(currentTicket,visited.size));return;}
   const i=Number(currentZone.replace('floor-',''))-1;if(FLOORS[i])subtitles.show(floorNarration(i,FLOORS[i].name));
 }
@@ -433,31 +475,32 @@ function refreshMap(){
   $('floor-list').querySelectorAll<HTMLButtonElement>('button').forEach(b=>{const n=Number(b.dataset.floor);b.classList.toggle('visited',visited.has(n));b.classList.toggle('active',currentZone===`floor-${n}`);});
 }
 function travelTo(id:string){
-  if(id!=='registry'&&id!=='hall'&&!/^floor-([1-9]|1[0-8])$/.test(id))return;
+  if(id!=='registry'&&id!=='hall'&&id!=='bar'&&!/^floor-([1-9]|1[0-8])$/.test(id))return;
   if(!registered&&id!=='registry'){showGuide('Xin ghé quầy ghi danh nhận thẻ hồn trước nhé. Quầy ở bên trái đường đá.');closeMap();return;}
-  travelling=true;closeRegistration();navigator.cancel();stopExperience();setChaosMode(false);chaosPendingUntil=0;
+  travelling=true;stopDance();closeRegistration();navigator.cancel();stopExperience();setChaosMode(false);chaosPendingUntil=0;
   closeMap();subtitles.clear();$('registration-card').classList.add('hidden');$('scene-fade').classList.add('active');keys.clear();velocity.set(0,0,0);
   window.setTimeout(()=>{
     currentFilm?.dispose();currentFilm=undefined;filmSuppressed=false;$('floor-cinema').classList.add('hidden');expandFilm(false);
     if(activeVisit){activeVisit.root.traverse(o=>{o.userData.disposed=true;const c=riggedActors.get(o as THREE.Group);if(c){activeMixers.delete(c.mixer);c.mixer.stopAllAction();riggedActors.delete(o as THREE.Group);}});activeVisit.dispose();activeVisit=undefined;}
     currentZone=id;registryEnvironment.visible=id==='registry';queue.visible=id==='registry';clerk.visible=id==='registry';
     document.body.dataset.zone=id;
-    if(id!=='registry'){activeVisit=buildVisitZone(id,createZoneActor);scene.add(activeVisit.root);}
+    if(id!=='registry'){activeVisit=id==='bar'?buildBarZone(createZoneActor,barTime):buildVisitZone(id,createZoneActor);scene.add(activeVisit.root);}
     activeVisit?.chaos?.configure(sid=>sid===(room?localSessionId:'local')?player:remotes.get(sid)?.zone===currentZone?remotes.get(sid)?.root:undefined,(sid,kind)=>{if(kind==='caught'&&sid===(room?localSessionId:'local')){showToast('Bắt quả tang! Quỷ sai gõ đầu: “Quậy nữa ta mách Diêm Vương!”');soundscape.cue('thud');}});
     if(!room)for(const e of soloChaos.snapshot(id))receiveChaos(e,Date.now(),true);
     const f=FLOORS[Number(id.replace('floor-',''))-1];
     if(f){visited.add(Number(id.replace('floor-','')));try{localStorage.setItem('underworld.visited',JSON.stringify([...visited]));}catch{}}
     if(f){const n=String(Number(id.replace('floor-',''))).padStart(2,'0');currentFilm=attachLoopVideo(scene,`/video/floors/floor-${n}.mp4?v=${PUNISHMENT_MEDIA_REVISION}`,new THREE.Vector3(7,3.2,-7),new THREE.Vector2(4,2.25),{video:$('scene-film') as HTMLVideoElement,poster:`/video/floors/floor-${n}.png?v=${PUNISHMENT_MEDIA_REVISION}`});$('floor-cinema').classList.remove('hidden');void currentFilm.play().catch(()=>showToast('Bấm phát trong ô video để xem màn diễn.'));}
-    const color=f?.color??0x172128;scene.background=new THREE.Color(color);scene.fog=new THREE.FogExp2(color,id==='hall'?.013:.022);
+    const color=id==='bar'?0x172332:f?.color??0x172128;scene.background=new THREE.Color(color);scene.fog=new THREE.FogExp2(color,id==='hall'||id==='bar'?.013:.022);
     player.position.set(0,0,id==='registry'?4.5:5.5);player.rotation.y=Math.PI;configureWalking();cameraRig.reset(player.position);
     guide.position.set(id==='registry'?-4.3:3.5,0,id==='registry'?-1.6:5.3);guide.rotation.y=id==='registry'?.32:-.7;
-    $('zone-name').textContent=f?`TẦNG ${id.replace('floor-','')} · ${f.name.toLocaleUpperCase('vi')}`:id==='hall'?'CHÍNH ĐIỆN':'CỬA TIẾP DẪN';
-    $('zone-subtitle').textContent=f?'THẬP BÁT ĐỊA NGỤC · KHÁCH THAM QUAN':id==='hall'?'ĐIỆN XÉT XỬ · 18 CỔNG THAM QUAN':'ÂM PHỦ · KHU GHI DANH';
+    $('zone-name').textContent=f?`TẦNG ${id.replace('floor-','')} · ${f.name.toLocaleUpperCase('vi')}`:id==='bar'?'BAR MẠNH BÀ · QUỶ QUẨY':id==='hall'?'CHÍNH ĐIỆN':'CỬA TIẾP DẪN';
+    $('zone-subtitle').textContent=id==='bar'?'TỘI GÌ CŨNG PHẢI QUẨY CHỨ':f?'THẬP BÁT ĐỊA NGỤC · KHÁCH THAM QUAN':id==='hall'?'ĐIỆN XÉT XỬ · 18 CỔNG THAM QUAN':'ÂM PHỦ · KHU GHI DANH';
     $('zone-description').classList.toggle('hidden',id==='registry');$('zone-number').textContent=f?`TẦNG ${id.replace('floor-','')} / 18`:'CHÍNH ĐIỆN';$('zone-title').textContent=f?.name??'Điện xét xử';$('zone-story').textContent=f?.story??'Bẩm Diêm Vương hoặc chọn một trong 18 cổng hai bên điện.';
     $('read-story').textContent=id==='hall'?'Xem Diêm Vương phán':'Đọc chuyện tội và phạt';
     $('experience-punishment').hidden=!f;$('toggle-chaos').hidden=!f;refreshExperienceButton();
-    startAmbient(id);soundscape.setZone(id);subtitles.show(zoneDialogue(id));soundscape.cue('portal');refreshMap();room?.send('zone',{zone:id});sendRoom('chaos:sync');$('scene-fade').classList.remove('active');travelling=false;rebuildWorldUI();
-    if(visited.size===18)showToast('Đã tham quan đủ 18 tầng. Mời trở về Chính Điện!');
+    $('dance-panel').hidden=id!=='bar';refreshDancePanel();
+    startAmbient(id);soundscape.setZone(id);if(id!=='bar')subtitles.show(zoneDialogue(id));else showToast('Tội gì cũng phải quẩy chứ · chọn điệu để lên sàn!');soundscape.cue('portal');refreshMap();room?.send('zone',{zone:id});sendRoom('chaos:sync');if(id==='bar')sendRoom('bar:sync',{sentAt:Date.now()});$('scene-fade').classList.remove('active');travelling=false;rebuildWorldUI();
+    if(f&&visited.size===18)showToast('Đã tham quan đủ 18 tầng. Mời trở về Chính Điện!');
   },160);
 }
 function nearestWorldAction():ZoneAction|undefined {
@@ -467,6 +510,7 @@ function nearestWorldAction():ZoneAction|undefined {
 $('floor-list').innerHTML=FLOORS.map((f,i)=>`<button data-floor="${i+1}"><small>TẦNG ${String(i+1).padStart(2,'0')}</small>${f.name}</button>`).join('');
 $('floor-list').querySelectorAll<HTMLButtonElement>('button').forEach(b=>b.addEventListener('click',()=>travelTo(`floor-${b.dataset.floor}`)));
 $('go-registry').addEventListener('click',()=>travelTo('registry'));$('go-hall').addEventListener('click',()=>travelTo('hall'));
+$('go-bar').addEventListener('click',()=>travelTo('bar'));$('map-bar').addEventListener('click',()=>travelTo('bar'));
 $('open-map').addEventListener('click',()=>{navigator.cancel();stopExperience();mapOpen=true;keys.clear();refreshMap();$('map-panel').classList.remove('hidden');});$('close-map').addEventListener('click',closeMap);
 function interact() {
   if(!entered||mapOpen||experience.active)return;
@@ -494,9 +538,13 @@ async function connectRoom() {
       window.clearTimeout(registrationTimer);registrationPending=false;($('registration-submit') as HTMLButtonElement).disabled=false;
       if(!response.registered){$('registration-error').textContent=response.reason??'Chưa thể ghi danh, thử lại nhé.';return;}
       const showCard=!registered||registrationOpen;acceptRegistration(response.name??spiritName,response.ticket??currentTicket,showCard);
-      if(currentZone!=='registry'){sendRoom('zone',{zone:currentZone});sendRoom('chaos:sync');}
+      if(currentZone!=='registry'){sendRoom('zone',{zone:currentZone});sendRoom('chaos:sync');if(currentZone==='bar')sendRoom('bar:sync',{sentAt:Date.now()});}
     });
     room.onMessage('presence:count',()=>updateOnlineCount());
+    room.onMessage('bar:clock',(message:{serverNow:number;sentAt?:number})=>{
+      if(!Number.isFinite(message.serverNow))return;const now=Date.now(),rtt=typeof message.sentAt==='number'?Math.max(0,Math.min(5000,now-message.sentAt)):0;
+      barClockOffset=message.serverNow+rtt/2-now;soundscape.setBarClockOffset(barClockOffset);
+    });
     room.onMessage('chaos:event',(m:{event:ChaosEvent;serverNow:number})=>receiveChaos(m.event,m.serverNow));
     room.onMessage('chaos:snapshot',(m:{zone:string;events:ChaosEvent[];serverNow:number})=>{if(m.zone===currentZone)for(const e of m.events)receiveChaos(e,m.serverNow,true);});
     room.onMessage('chaos:rejected',(m:{reason:string})=>{chaosPendingUntil=0;showToast(m.reason);});
@@ -549,16 +597,18 @@ function tick() {
   const blocked=!entered||mapOpen||registrationOpen||experience.active||travelling;
   if(blocked)navigator.cancel();
   const moving=!blocked&&navigator.step(player.position,dt,dir,keys.has('ShiftLeft')||keys.has('ShiftRight')?4.25:3.05);
+  if(danceId&&(moving||currentZone!=='bar'))stopDance();
+  if(danceId){player.rotation.y+=Math.atan2(Math.sin(-player.rotation.y),Math.cos(-player.rotation.y))*(1-Math.exp(-8*dt));}
   const destination=navigator.destination;destinationMarker.visible=Boolean(destination)&&!blocked;
   if(destination){destinationMarker.position.set(destination.x,activeVisit?.obstacles.some(b=>b.containsPoint(destination))?.5:.06,destination.z);destinationMarker.scale.setScalar(1+Math.sin(elapsed*5)*.08);}
   if (velocity.lengthSq() > .035) {
     const angle = Math.atan2(velocity.x, velocity.z);
     player.rotation.y += Math.atan2(Math.sin(angle-player.rotation.y), Math.cos(angle-player.rotation.y)) * (1-Math.exp(-10*dt));
   }
-  if(!experience.active)player.position.y = Math.sin(elapsed * (moving ? 8 : 1.5)) * (moving ? .045 : .055);
+  if(!experience.active)player.position.y = danceId?0:Math.sin(elapsed * (moving ? 8 : 1.5)) * (moving ? .045 : .055);
   if (!riggedActors.has(player) && player.children[0]) player.children[0].rotation.z = Math.sin(elapsed * (moving ? 8 : 1.5)) * .025;
   const localEmote=chaosEmotes.get(room?localSessionId:'local');
-  if(!experience.active&&(!localEmote||localEmote.until<Date.now())){delete player.userData.performanceClip;setActorMoving(player, moving, keys.has('ShiftLeft') || keys.has('ShiftRight'));}
+  if(!experience.active&&!danceId&&(!localEmote||localEmote.until<Date.now())){delete player.userData.performanceClip;setActorMoving(player, moving, keys.has('ShiftLeft') || keys.has('ShiftRight'));}
   activeMixers.forEach((mixer) => mixer.update(dt));
   guide.rotation.z = Math.sin(elapsed * .8) * .025; guideHead.rotation.y = Math.sin(elapsed * .55) * .08; guideBell.rotation.z = Math.sin(elapsed * 3) * .18;
   clerk.rotation.z = Math.sin(elapsed * .7) * .018;
@@ -570,9 +620,10 @@ function tick() {
     remote.renderTime=remote.stageTime<0?-1:remote.renderTime<0||Math.abs(remote.renderTime-remote.stageTime)>2?remote.stageTime:THREE.MathUtils.damp(remote.renderTime,remote.stageTime,16,dt);
     remote.root.position.lerp(remote.target, 1 - Math.exp(-12 * dt));
     remote.root.quaternion.slerp(remote.rotation,1-Math.exp(-12*dt));remote.root.scale.lerp(remote.scale,1-Math.exp(-12*dt));
-    if(!remote.mode)remote.root.position.y = Math.sin(elapsed * (remote.moving ? 8 : 1.5)) * .045;
+    if(!remote.mode)remote.root.position.y = remote.zone==='bar'&&isDance(remote.clip)&&!remote.moving?0:Math.sin(elapsed * (remote.moving ? 8 : 1.5)) * .045;
     const emote=chaosEmotes.get(sessionId);
-    if(remote.mode&&remote.clip){remote.root.userData.performanceClip=remote.clip;performActor(remote.root,remote.mode==='performing'&&remote.renderTime>=0?remote.renderTime:elapsed);}else if(emote&&emote.until>Date.now()){remote.root.userData.performanceClip=emote.kind==='pants'?'pull':'pound';performActor(remote.root,(.65-(emote.until-Date.now())/1000)*1.8);}else{delete remote.root.userData.performanceClip;setActorMoving(remote.root,remote.moving);}
+    if(remote.zone==='bar'&&isDance(remote.clip)&&!remote.moving){remote.root.userData.performanceClip=remote.clip;performActor(remote.root,barTime());}
+    else if(remote.mode&&remote.clip){remote.root.userData.performanceClip=remote.clip;performActor(remote.root,remote.mode==='performing'&&remote.renderTime>=0?remote.renderTime:elapsed);}else if(emote&&emote.until>Date.now()){remote.root.userData.performanceClip=emote.kind==='pants'?'pull':'pound';performActor(remote.root,(.65-(emote.until-Date.now())/1000)*1.8);}else{delete remote.root.userData.performanceClip;setActorMoving(remote.root,remote.moving);}
     if(remote.mode){
       if(!remote.escort){remote.escort=createZoneActor('demon',remote.escortTarget.x,remote.escortTarget.z,1.1);scene.add(remote.escort);}
       remote.escort.visible=remote.root.visible;
@@ -585,6 +636,7 @@ function tick() {
   activeVisit?.update(elapsed,dt);
   experience.update(dt,elapsed);
   if(experience.active)performActor(player,experience.phase==='performing'?(activeVisit?.animationTime??elapsed):elapsed);
+  else if(danceId){player.userData.performanceClip=danceId;performActor(player,barTime());}
   else if(localEmote&&localEmote.until>Date.now()){player.userData.performanceClip=localEmote.kind==='pants'?'pull':'pound';performActor(player,(.65-(localEmote.until-Date.now())/1000)*1.8);}
   if(entered)soundscape.tick(elapsed,player.position.x,player.position.z,activeVisit?.animationTime??elapsed);
   activeVisit?.root.traverse(o=>{if(o.userData.isActor)performActor(o as THREE.Group,o.userData.chaosReaction?elapsed:activeVisit?.animationTime??elapsed);});
@@ -592,7 +644,7 @@ function tick() {
   if(currentZone==='registry')performActor(clerk,elapsed);
   refreshChaosUI();
   const shot=['positioning','performing'].includes(experience.phase)?experience.cameraHint():undefined;
-  cameraRig.update(camera,player.position,dt,shot);
+  cameraRig.update(camera,player.position,dt,shot,currentZone==='bar'&&gameScreen.compact);
   worldUI.update(camera,player.position,gameScreen.size.width,gameScreen.size.height,entered&&!mapOpen&&!registrationOpen&&!experience.active&&!travelling&&!document.body.classList.contains('film-expanded')&&(!gameScreen.compact||!subtitles.visible),gameScreen.blocked);
   networkTimer += dt;
   if (room && entered && networkTimer > .05) {const escort=experience.escortPose();sendRoom('move', { x: player.position.x, z: player.position.z, yaw: player.rotation.y, moving:experience.active?['escorting','returning'].includes(experience.phase):moving,y:player.position.y,pitch:player.rotation.x,roll:player.rotation.z,sx:player.scale.x,sy:player.scale.y,sz:player.scale.z,clip:player.userData.performanceClip??'',stage:experience.active?experience.phase:'',stageTime:player.userData.stageTime??-1,escortX:escort?.position.x??0,escortZ:escort?.position.z??0,escortYaw:escort?.yaw??0,escortMoving:escort?.moving??false,escortClip:escort?.clip??'' }); networkTimer = 0; }
@@ -606,6 +658,7 @@ function tapWorld(event:PointerEvent){
   pointerRay.setFromCamera(point,camera);const picked=worldUI.pick(pointerRay);
   if(picked){activateHotspot(picked.definition,picked.button);return;}
   const destination=pointerRay.ray.intersectPlane(groundPlane,new THREE.Vector3());if(!destination)return;
+  if(danceId)stopDance();
   subtitles.clear();$('registration-card').classList.add('hidden');keys.clear();
   if(!navigator.go(player.position,destination))showToast('Chỗ này chưa có lối đi. Bấm một điểm khác nhé.');
 }
@@ -615,9 +668,10 @@ canvas.addEventListener('pointermove',event=>{if(pointerDown?.id===event.pointer
 canvas.addEventListener('pointerup',event=>{const start=pointerDown;pointerDown=undefined;if(canvas.hasPointerCapture(event.pointerId))canvas.releasePointerCapture(event.pointerId);if(start?.id===event.pointerId&&!start.moved&&isWorldTap(start,{x:event.clientX,y:event.clientY},start.touch))tapWorld(event);});
 canvas.addEventListener('pointercancel',()=>{pointerDown=undefined;});
 window.addEventListener('keydown',event=>{
-  if(event.code==='Escape'){expandFilm(false);closeRegistration();navigator.cancel();setChaosMode(false);stopExperience();closeMap();subtitles.clear();return;}
+  if(event.code==='Escape'){stopDance();expandFilm(false);closeRegistration();navigator.cancel();setChaosMode(false);stopExperience();closeMap();subtitles.clear();return;}
   const element=event.target as HTMLElement|null;
   if(registrationOpen||element?.closest('input,textarea,select,[contenteditable=true]'))return;
+  if(currentZone==='bar'&&!event.repeat&&!event.ctrlKey&&!event.metaKey&&!event.altKey&&/^Digit[1-6]$/.test(event.code)){chooseDance(DANCES[Number(event.code.slice(-1))-1].id);return;}
   if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(event.code))event.preventDefault();keys.add(event.code);
   if(event.code==='KeyE'&&!event.repeat)interact();
   if(event.code==='Space'&&!event.repeat&&subtitles.visible&&!element?.closest('button,a')){event.preventDefault();subtitles.next();}
@@ -628,3 +682,4 @@ $('enter-button').addEventListener('click',async()=>{entered=true;cameraRig.rese
 $('close-card').addEventListener('click',()=>{$('registration-card').classList.add('hidden');$('hud').classList.remove('hidden');});
 const fitRegistration=()=>{$('registration-dialog').style.setProperty('--dialog-height',`${window.visualViewport?.height??innerHeight}px`);};window.visualViewport?.addEventListener('resize',fitRegistration);fitRegistration();
 window.addEventListener('blur',()=>{keys.clear();navigator.cancel();pointerDown=undefined;});
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&currentZone==='bar'){soundscape.setBarClockOffset(barClockOffset);sendRoom('bar:sync',{sentAt:Date.now()});}});

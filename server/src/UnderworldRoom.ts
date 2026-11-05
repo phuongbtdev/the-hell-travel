@@ -3,6 +3,7 @@ import { schema, t, type SchemaType } from '@colyseus/schema';
 import { ExperienceQueue } from './ExperienceQueue.js';
 import {ChaosLedger,type ChaosAction} from '../../shared/chaos.js';
 import {cleanSpiritName} from '../../shared/spirit-name.js';
+import {isDance} from '../../shared/bar.js';
 
 export const PlayerState = schema({
   x: t.number().default(0),
@@ -57,6 +58,10 @@ export class UnderworldRoom extends Room<{ state: UnderworldState }> {
   }
 
   messages = {
+    'bar:sync':(client:Client,payload:{sentAt?:number}={})=>{
+      const player=this.state.players.get(client.sessionId);
+      if(player?.registered&&player.zone==='bar')client.send('bar:clock',{serverNow:Date.now(),sentAt:Number.isFinite(payload.sentAt)?payload.sentAt:undefined});
+    },
     'chaos:sync':(client:Client)=>{const p=this.state.players.get(client.sessionId);if(p)client.send('chaos:snapshot',{zone:p.zone,events:this.chaos.snapshot(p.zone),serverNow:Date.now()});},
     'chaos:action':(client:Client,payload:{action?:ChaosAction;target?:string})=>{
       const p=this.state.players.get(client.sessionId);if(!p)return;
@@ -74,7 +79,7 @@ export class UnderworldRoom extends Room<{ state: UnderworldState }> {
     zone:(client:Client,payload:{zone?:string})=>{
       const player=this.state.players.get(client.sessionId),zone=payload.zone;
       if(!player||typeof zone!=='string'||(zone!=='registry'&&!player.registered))return;
-      if(zone==='registry'||zone==='hall'||/^floor-([1-9]|1[0-8])$/.test(zone)){this.releaseExperience(client.sessionId);player.zone=zone;player.x=0;player.z=5.5;player.moving=false;}
+      if(zone==='registry'||zone==='hall'||zone==='bar'||/^floor-([1-9]|1[0-8])$/.test(zone)){this.releaseExperience(client.sessionId);player.zone=zone;player.x=0;player.z=5.5;player.moving=false;}
     },
     move: (client: Client, payload: MovePayload) => {
       const player = this.state.players.get(client.sessionId);
@@ -92,7 +97,10 @@ export class UnderworldRoom extends Room<{ state: UnderworldState }> {
         if(typeof payload.escortYaw==='number'&&Number.isFinite(payload.escortYaw))player.escortYaw=Math.atan2(Math.sin(payload.escortYaw),Math.cos(payload.escortYaw));
         player.escortMoving=Boolean(payload.escortMoving);player.escortClip=typeof payload.escortClip==='string'&&clips.has(payload.escortClip)?payload.escortClip:'';
         if(['approaching','detaining','escorting','positioning','performing','returning'].includes(payload.stage??''))player.experienceStage=payload.stage!;
-      }else this.resetPose(client.sessionId);
+      }else{
+        this.resetPose(client.sessionId);
+        if(player.registered&&player.zone==='bar'&&!player.moving&&isDance(payload.clip))player.clip=payload.clip;
+      }
     },
     register: (client: Client,payload:{name?:unknown}={}) => {
       const player = this.state.players.get(client.sessionId);

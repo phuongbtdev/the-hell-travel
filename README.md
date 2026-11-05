@@ -24,6 +24,16 @@ Tầng 11 **Đá Đè** có giàn nâng và cú thả đá tăng tốc, nện tr
 
 Tầng 14 **Kéo Cổ** thay cho Oan Khuất. Quỷ quay tời kéo cổ dài tới xà, thân giãy rồi tuột xuống, đầu vẫn treo trên dây. Thả chốt thì đầu bật lại theo dao động lò xo giảm dần; quỷ cầm vợt đỡ hụt và cả thân ráp trở lại. Đầu di chuyển bằng xương `Head` của model, cổ là lưới 3D uốn cong cập nhật trên bộ nhớ có sẵn. Cảnh, âm tời/lò xo, góc máy, người trải nghiệm và người xem dùng chung vòng 16 giây trong `src/world/neck-pull.ts`. Hủy sẽ khôi phục xương đầu.
 
+## Bar Mạnh Bà · Quỷ Quẩy
+
+**Tội gì cũng phải quẩy chứ.** Sau khi ghi danh, chọn **Bar Mạnh Bà ♫** trên thanh đi lại, thẻ bar trên bản đồ hoặc cổng ở Chính Điện. Khu riêng có quầy Mạnh Bà, bàn DJ Quỷ Sai, sàn gạch phát sáng nhẹ, đèn lồng và năm khách NPC nhảy sẵn; không cần người chơi khác để khu vực có hoạt động.
+
+Nhạc bar stereo tự soạn dài 32 giây, 120 BPM. Bảng chọn có hai nhóm: **Quẩy vui** gồm nhún theo beat, lắc lư, quẩy tay, trượt chân, xoay hồn, gọi hội; **Hip hop** gồm Hip hop, Popping, Robot, Moonwalk và Breakdance. Chọn điệu để nhảy, bấm **Dừng**, chạm đất hoặc đi bằng bàn phím để dừng. Nút ♫ bật/tắt nhạc; lựa chọn tắt âm được giữ nguyên khi vào bar. Bàn phím 1–6 là phím tắt cho sáu điệu Quẩy vui.
+
+Màn hình điện thoại tự thu bảng chọn sau khi chọn điệu; bấm **Đổi điệu** để mở lại. Camera giữ hướng cố định và đặt hồn phía trên bảng thao tác hoặc bên trái bảng trên màn hình ngang. Điệu nhảy dùng xương thật của model, chuyển cảnh bằng crossfade; mỗi model dùng chung dữ liệu clip đã lưu đệm. Người trong cùng phòng nhận lựa chọn điệu; nhạc, khách NPC và người chơi theo cùng đồng hồ nhịp, có hiệu chỉnh thời gian từ server khi vào bar hoặc quay lại tab. Rời bar/di chuyển xóa điệu trên server, các tầng hình phạt không nhận lệnh nhảy.
+
+Mã cảnh tại `src/world/bar.ts`, chuyển động tại `src/world/dances.ts`, cấu hình dùng chung tại `shared/bar.ts`. Dùng `npm run assets:bar` để tạo nhạc và ảnh kiểm tra trong `public/assets/bar/`; `npm run verify:bar` kiểm tra 11 điệu trên 13 rig, nối vòng/chuyển điệu/khôi phục, camera mobile, đường đi, đồng bộ hai người, luật đổi khu và file nhạc.
+
 ## Đại náo từng tầng
 
 Bấm **Đại náo tầng này** để vào sân khấu và chọc phá tại cả 18 tầng. Đứng gần mục tiêu được đánh dấu rồi dùng nút trên màn hình hoặc:
@@ -39,7 +49,7 @@ Thanh độ quậy tăng khi ra tay và giảm theo thời gian. Màn diễn c�
 
 NPC áp giải dừng bên ngoài vùng của người chơi, duy trì khoảng cách tối thiểu 1,3 đơn vị khi tới bắt và dẫn đi. Hồn ma bám theo dấu đường phía sau lệch bên; hai nhân vật nhường nhau khi quay đầu. Camera khi đi và áp giải giữ hướng cố định; góc cận cảnh chỉ dùng khi thi hành. Người xem cùng phòng nhận vị trí, hướng và chuyển động thật của NPC áp giải thay vì vị trí ước lượng sát người chơi.
 
-19 khu vực (chính điện và 18 tầng) được dựng trong `src/world/underworld.ts`, chỉ giữ khu hiện tại trong scene. Tiến độ tham quan được lưu trên thiết bị. Server đồng bộ khu hiện tại để chỉ hiện những người cùng nơi.
+Chính điện và 18 tầng được dựng trong `src/world/underworld.ts`; bar là khu thứ 20 tại `src/world/bar.ts`. Chỉ giữ khu hiện tại trong scene. Tiến độ tham quan được lưu trên thiết bị. Server đồng bộ khu hiện tại để chỉ hiện những người cùng nơi.
 
 ## Chạy local
 

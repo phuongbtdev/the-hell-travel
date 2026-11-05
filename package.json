@@ -7,6 +7,8 @@
     "assets:characters": "node scripts/build-character-assets.mjs",
     "assets:videos": "node --import tsx scripts/render-floor-videos.ts",
     "assets:music": "python3 scripts/build-soundtrack.py",
+    "assets:bar": "python3 scripts/build-bar-music.py && node --import tsx scripts/render-bar-preview.ts",
+    "verify:bar": "node --import tsx scripts/verify-bar.ts",
     "verify:assets": "node --import tsx scripts/verify-assets.ts",
     "verify:experience": "node --import tsx scripts/verify-experience.ts",
     "verify:chaos": "node --import tsx scripts/verify-chaos.ts",

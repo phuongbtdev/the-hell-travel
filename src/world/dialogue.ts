@@ -1,6 +1,6 @@
-export type Speaker='guide'|'demon'|'victim'|'judge'|'clerk';
+export type Speaker='guide'|'demon'|'victim'|'judge'|'clerk'|'mengpo';
 export type DialogueLine={speaker:Speaker;text:string};
-export const SPEAKER_NAMES:Record<Speaker,string>={guide:'Tiểu Sai',demon:'Quỷ sai',victim:'Hồn chịu phạt',judge:'Diêm Vương',clerk:'Thư lại'};
+export const SPEAKER_NAMES:Record<Speaker,string>={guide:'Tiểu Sai',demon:'Quỷ sai',victim:'Hồn chịu phạt',judge:'Diêm Vương',clerk:'Thư lại',mengpo:'Mạnh Bà'};
 const exchanges:[string,string][]=[
  ['Kéo thêm chút nữa… Ấy, đừng buông kẹp!','Lưỡi tôi dài rồi, sao ông còn ăn vả ngược vậy?!'],
  ['Giữ phần hồn bên trái. Cắt từng nhịp, nhớ gom đủ các mảnh!','Nhớ ráp đủ giúp tôi. Đừng gửi thiếu mảnh, mai tôi còn đi tham quan!'],
@@ -22,6 +22,7 @@ const exchanges:[string,string][]=[
  ['Kéo! Đẩy! Không, ông kéo thì tôi phải đẩy!','Hai ông thống nhất nhịp trước được không? Tôi nằm chờ đây.'],
 ];
 export function zoneDialogue(id:string):DialogueLine[]{
+ if(id==='bar')return [{speaker:'guide',text:'Chào mừng tới Bar Mạnh Bà! Tội gì cũng phải quẩy chứ. Chọn một điệu ở bảng Quỷ Quẩy, hồn sẽ nhảy theo nhạc. Bấm mặt đất để dừng nhảy và đi tiếp.'}];
  if(id==='registry')return [{speaker:'clerk',text:'Hồn mới xuống, bấm nút Ghi danh trên đầu tôi rồi điền tên vong hồn nhé. Thư lại cần biết tên để còn gọi, chứ gọi ê vong kia thì cả hàng quay lại.'},{speaker:'guide',text:'Tôi là Tiểu Sai. Bấm hoặc chạm mặt đất để đi, bấm nút trên NPC để tương tác. Nhận thẻ xong, mời ngài ghé Chính Điện hoặc chọn tầng trên bản đồ.'}];
  if(id==='hall')return [{speaker:'judge',text:'Chào các hồn mới đến. Đã có thẻ thì cứ tự nhiên tham quan mười tám tầng. Khi gọi số, nhớ quay lại.'},{speaker:'clerk',text:'Thư lại đang kiểm tra sổ. Xin đừng đọc hồ sơ của nhau.'}];
  const pair=exchanges[Number(id.replace('floor-',''))-1];return pair?[{speaker:'demon',text:pair[0]},{speaker:'victim',text:pair[1]}]:[];

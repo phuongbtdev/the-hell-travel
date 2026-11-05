@@ -1,0 +1,25 @@
+.map-bar{position:relative;width:100%;display:grid;gap:6px;margin:0 0 14px;padding:16px 42px 16px 16px;text-align:left;border:1px solid #a895b9;background:linear-gradient(110deg,#28424d,#403046);color:#fae4be;cursor:pointer;border-radius:7px}
+.map-bar span{font:10px 'DM Mono',monospace;letter-spacing:.08em;color:#a2e4d5}.map-bar strong{font:500 22px 'Playfair Display',serif}.map-bar>b{position:absolute;right:16px;top:23px;font-size:24px}
+.dance-panel{position:absolute;z-index:3;right:5vw;bottom:110px;width:min(420px,90vw);padding:16px;border:1px solid #ab94b7;border-radius:14px;background:linear-gradient(145deg,#142936f5,#2a2033f5);box-shadow:0 12px 40px #0008;backdrop-filter:blur(10px);color:#f8e4c4}
+.dance-panel[hidden]{display:none}
+.dance-panel header{display:flex;align-items:center;gap:8px;margin-bottom:12px}.dance-panel header>div{flex:1;min-width:0}.dance-panel header span{font:9px 'DM Mono',monospace;letter-spacing:.08em;color:#99ddce}.dance-panel h2{font:500 24px/1.2 'Playfair Display',serif;margin:7px 0 0}.dance-panel header button{flex-shrink:0;min-width:44px;min-height:44px;border:1px solid #a895b977;border-radius:8px;background:#1b303d;color:#ffe0a7;cursor:pointer;font:600 12px 'Be Vietnam Pro',sans-serif;touch-action:manipulation}
+#bar-music{font-size:22px}#bar-music[aria-pressed=false]{opacity:.7}#stop-dance:disabled{opacity:.4;cursor:default}
+.dance-tabs{display:flex;gap:6px;margin-bottom:9px}.dance-tabs button{flex:1;min-height:36px;border:1px solid #a895b944;border-radius:7px;background:#152836;color:#bcd5db;font:600 11px 'Be Vietnam Pro',sans-serif;cursor:pointer;touch-action:manipulation}.dance-tabs button[aria-pressed=true]{background:#38515b;border-color:#8bd9d1;color:#c9fff0}.dance-actions button[hidden]{display:none}
+.dance-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}.dance-actions button{min-height:60px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;padding:8px 4px;border:1px solid #97abbb55;border-radius:8px;background:#243642;color:#e9e6e4;font:600 11px/1.3 'Be Vietnam Pro',sans-serif;cursor:pointer;touch-action:manipulation}.dance-actions button>span{font:24px/1 system-ui;color:#8bd9d1}.dance-actions button:hover{background:#365463}.dance-actions button[aria-pressed=true]{border-color:#f4c179;background:#ddae72;color:#152430}.dance-actions button[aria-pressed=true]>span{color:#253d44}.dance-actions button:focus-visible{outline:3px solid #9ae6d8;outline-offset:2px}
+#dance-status{font-size:11px;line-height:1.6;color:#c6d6d7;margin:10px 0 0}
+.dance-footer{display:flex;align-items:center;gap:8px}.dance-footer p{flex:1}#change-dance{display:none}
+body[data-zone=bar] .zone-description{display:none}
+@media(max-width:700px),(max-width:950px) and (max-height:500px){
+ .dance-panel{left:max(12px,env(safe-area-inset-left));right:max(12px,env(safe-area-inset-right));bottom:calc(38px + env(safe-area-inset-bottom));width:auto;padding:12px;backdrop-filter:none}
+ .dance-panel header{margin-bottom:9px;gap:6px}.dance-panel header span{font-size:8px;letter-spacing:0}.dance-panel h2{font-size:20px;margin-top:4px}.dance-panel header button{min-width:44px;min-height:44px}
+ .dance-tabs{margin-bottom:8px}.dance-tabs button{min-height:44px}.dance-actions{gap:6px}.dance-actions button{min-height:46px;flex-direction:row;gap:5px;padding:6px 4px;font-size:10px}.dance-actions button>span{font-size:20px}
+ #dance-status{font-size:10px;margin-top:7px}
+ #change-dance:not([hidden]){display:block;flex-shrink:0;min-height:44px;min-width:74px;border:1px solid #8bd9d177;border-radius:7px;background:#29444c;color:#c9fff0;font:600 11px 'Be Vietnam Pro',sans-serif;cursor:pointer;touch-action:manipulation}
+ body.dance-picker-collapsed .dance-tabs,body.dance-picker-collapsed .dance-actions{display:none}
+ body.dialogue-open .dance-panel{display:none}
+ .map-bar{padding:12px 36px 12px 12px}.map-bar strong{font-size:21px}
+}
+@media(max-width:950px) and (max-height:500px) and (orientation:landscape){
+ .dance-panel{left:auto;right:max(12px,env(safe-area-inset-right));bottom:calc(8px + env(safe-area-inset-bottom));width:350px;padding:10px}
+ .dance-panel h2{font-size:19px}.dance-panel header{margin-bottom:6px}.dance-actions button{min-height:44px}#dance-status{margin-top:5px;font-size:9px}
+}
