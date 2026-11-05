@@ -12,14 +12,14 @@ export class SoftwareRenderer {
     scene.updateMatrixWorld(true);camera.updateMatrixWorld(true);
     const vp=new T.Matrix4().multiplyMatrices(camera.matrixWorldInverse,new T.Matrix4()),projection=camera.projectionMatrix.elements;
     const light=new T.Vector3(-.3,.8,1).normalize(),v=new T.Vector3(),a=new T.Vector3(),b=new T.Vector3(),c=new T.Vector3(),normal=new T.Vector3(),edge=new T.Vector3();
-    scene.traverseVisible(mesh=>{
+    const draw=(mesh,matrixWorld)=>{
       if(!mesh.isMesh)return;const mat=mesh.material;if(Array.isArray(mat)||mat.opacity<.25)return;
       const g=mesh.geometry,pos=g.attributes.position,indices=g.index?.array;if(!pos)return;
       if(mesh.isSkinnedMesh)mesh.skeleton.update();
-      const mv=new T.Matrix4().multiplyMatrices(vp,mesh.matrixWorld),world=new Float32Array(pos.count*3),screen=new Float32Array(pos.count*3),shades=new Float32Array(pos.count),normalMatrix=new T.Matrix3().getNormalMatrix(mesh.matrixWorld);
+      const mv=new T.Matrix4().multiplyMatrices(vp,matrixWorld),world=new Float32Array(pos.count*3),screen=new Float32Array(pos.count*3),shades=new Float32Array(pos.count),normalMatrix=new T.Matrix3().getNormalMatrix(matrixWorld);
       for(let i=0;i<pos.count;i++){
         v.fromBufferAttribute(pos,i);if(mesh.isSkinnedMesh)mesh.applyBoneTransform(i,v);
-        a.copy(v).applyMatrix4(mesh.matrixWorld);world.set([a.x,a.y,a.z],i*3);v.applyMatrix4(mv);
+        a.copy(v).applyMatrix4(matrixWorld);world.set([a.x,a.y,a.z],i*3);v.applyMatrix4(mv);
         const d=-v.z;screen[i*3]=(v.x*projection[0]/d*.5+.5)*W;screen[i*3+1]=(-v.y*projection[5]/d*.5+.5)*H;screen[i*3+2]=d;
         if(g.attributes.normal){normal.fromBufferAttribute(g.attributes.normal,i).applyMatrix3(normalMatrix).normalize();shades[i]=.70+.48*Math.max(0,normal.dot(light));}else shades[i]=.9;
       }
@@ -36,11 +36,19 @@ export class SoftwareRenderer {
         const r=color.r*255,gg=color.g*255,bb=color.b*255;
         for(let y=minY;y<=maxY;y++)for(let x=minX;x<=maxX;x++){
           const w0=((by-cy)*(x-cx)+(cx-bx)*(y-cy))/area,w1=((cy-ay)*(x-cx)+(ax-cx)*(y-cy))/area,w2=1-w0-w1;
-          if(w0<0||w1<0||w2<0)continue;const z=1/(w0/az+w1/bz+w2/cz),p=y*W+x;if(z>=depth[p])continue;depth[p]=z;
-          const intensity=Math.min(1.3,shades[ia/3]*w0+shades[ib/3]*w1+shades[ic/3]*w2+emissive),fade=Math.min(.25,z/100),k=p*3;rgb[k]=Math.min(255,r*intensity)*(1-fade)+((bg>>16)&255)*fade;rgb[k+1]=Math.min(255,gg*intensity)*(1-fade)+((bg>>8)&255)*fade;rgb[k+2]=Math.min(255,bb*intensity)*(1-fade)+(bg&255)*fade;
+          if(w0<0||w1<0||w2<0)continue;const z=1/(w0/az+w1/bz+w2/cz)-(mat.polygonOffset?.001:0),p=y*W+x;if(z>=depth[p])continue;if(mat.depthWrite!==false)depth[p]=z;
+          const intensity=Math.min(1.3,shades[ia/3]*w0+shades[ib/3]*w1+shades[ic/3]*w2+emissive),fade=Math.min(.25,z/100),k=p*3,alpha=mat.transparent?mat.opacity:1;rgb[k]=(Math.min(255,r*intensity)*(1-fade)+((bg>>16)&255)*fade)*alpha+rgb[k]*(1-alpha);rgb[k+1]=(Math.min(255,gg*intensity)*(1-fade)+((bg>>8)&255)*fade)*alpha+rgb[k+1]*(1-alpha);rgb[k+2]=(Math.min(255,bb*intensity)*(1-fade)+(bg&255)*fade)*alpha+rgb[k+2]*(1-alpha);
         }
       }
+    };
+    const queue=[];
+    scene.traverseVisible(mesh=>{
+      if(!mesh.isMesh)return;
+      if(mesh.isInstancedMesh){for(let i=0;i<mesh.count;i++){const matrix=new T.Matrix4();mesh.getMatrixAt(i,matrix);matrix.premultiply(mesh.matrixWorld);queue.push({mesh,matrix});}}
+      else queue.push({mesh,matrix:mesh.matrixWorld});
     });
+    queue.sort((a,b)=>Number(Boolean(a.mesh.material.transparent))-Number(Boolean(b.mesh.material.transparent))||(!a.mesh.material.transparent?0:new T.Vector3().setFromMatrixPosition(b.matrix).distanceToSquared(camera.position)-new T.Vector3().setFromMatrixPosition(a.matrix).distanceToSquared(camera.position)));
+    for(const {mesh,matrix} of queue)draw(mesh,matrix);
     return rgb;
   }
 }

@@ -46,12 +46,14 @@ for(let i=0;i<18;i++){
 }
 const fake=()=>({textContent:'',scrollTop:0,offsetHeight:150,disabled:false,inert:false,classList:{toggle(){}},setAttribute(){},addEventListener(){}});
 const elements:any={panel:fake(),speaker:fake(),text:fake(),progress:fake(),previous:fake(),next:fake(),close:fake()};
-(globalThis as any).document.body={style:{setProperty(){}}};
+const subtitleClasses=new Set<string>();
+(globalThis as any).document.body={style:{setProperty(){}},classList:{toggle:(name:string,enabled:boolean)=>enabled?subtitleClasses.add(name):subtitleClasses.delete(name)}};
 const subtitles=new Subtitles(elements),lines=floorNarration(17,FLOORS[17].name),pages=paginateDialogue(lines);
 subtitles.show(lines);
 if(!subtitles.visible||elements.text.textContent!==pages[0].text||!elements.previous.disabled)throw Error('Initial subtitle state failed');
 subtitles.next();subtitles.previous();if(elements.text.textContent!==pages[0].text)throw Error('Cannot revisit subtitle');
-for(let i=0;i<pages.length;i++)subtitles.next();if(subtitles.visible||!elements.panel.inert)throw Error('Subtitles did not close');
+if(!subtitleClasses.has('dialogue-open'))throw Error('Mobile reading mode did not open');
+for(let i=0;i<pages.length;i++)subtitles.next();if(subtitles.visible||!elements.panel.inert||subtitleClasses.has('dialogue-open'))throw Error('Subtitles did not close');
 const audioSource=await fs.readFile('src/world/soundscape.ts','utf8');if(/speechSynthesis|SpeechSynthesisUtterance/.test(audioSource))throw Error('Voice synthesis remains enabled');
 if(judgeVerdict(1,18)[0].text===judgeVerdict(1,0)[0].text)throw Error('Completion verdict does not change');
 console.log('OK: character/media assets; complete paginated Vietnamese subtitles; previous/next/close; no speech synthesis; changing verdict.');

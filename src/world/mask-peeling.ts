@@ -28,13 +28,14 @@ function maskShell(){
 export function buildMaskPeelingStation({root,ghost,demon,assistant,mesh,subject}:StationOptions){
   const station=new T.Group();station.name='mask-peeling-station';root.add(station);
   const material=(color:number,extra:Partial<T.MeshStandardMaterialParameters>={})=>new T.MeshStandardMaterial({color,roughness:.6,...extra});
-  const wood=material(0x542d37),brass=material(0xb48b48,{metalness:.5}),ink=material(0x261c31),ivory=material(0xf0dfb4),red=material(0xc44548),purple=material(0x736080);
+  const wood=material(0x542d37),brass=material(0xb48b48,{metalness:.5}),ink=material(0x261c31),ivory=material(0xf0dfb4),red=material(0xc44548),purple=material(0x736080),fresh=material(0xc72248,{roughness:.25});
   const maskMaterials=[ivory,brass,red];
   const glow=material(0xb6fae4,{emissive:0x59dbbb,emissiveIntensity:.65});
   const box=(size:[number,number,number],p:[number,number,number],m:T.Material,parent:T.Object3D=station)=>mesh(new T.BoxGeometry(...size),m,p,parent);
   const tube=(points:T.Vector3[],radius:number,m:T.Material,parent:T.Object3D)=>mesh(new T.TubeGeometry(new T.CatmullRomCurve3(points),20,radius,6,false),m,[0,0,0],parent);
-  const mask=(variant:number,parent:T.Object3D)=>{
+  const mask=(variant:number,parent:T.Object3D,peeled=false)=>{
     const group=new T.Group();parent.add(group);mesh(maskShell(),maskMaterials[variant%3],[0,0,0],group);
+    if(peeled){const rim=mesh(new T.TorusGeometry(.32,.025,7,28),fresh,[0,0,-.015],group);rim.scale.y=1.28;}
     const dot=(p:[number,number,number],scale:[number,number,number],m:T.Material)=>{const o=mesh(new T.SphereGeometry(1,12,8),m,p,group);o.scale.set(...scale);return o;};
     dot([0,-.025,.16],[.055,.10,.07],maskMaterials[variant%3]);
     for(const side of [-1,1]){
@@ -73,7 +74,8 @@ export function buildMaskPeelingStation({root,ghost,demon,assistant,mesh,subject
     const hook=box([.10,.16,.18],[-4.5+i*1.8,3.7,-9.25],brass);
     const m=mask(i%3,station);m.position.copy(hook.position).add(new T.Vector3(0,-.4,.2));m.rotation.z=(i%2?1:-1)*.10;m.scale.setScalar(.85);
   }
-  const layers=maskMaterials.map((_,i)=>{const m=mask(i,station);m.name=`peeling-mask-${i}`;return m;});
+  const layers=maskMaterials.map((_,i)=>{const m=mask(i,station,true);m.name=`peeling-mask-${i}`;return m;});
+  const tissue=layers.map((_,i)=>Array.from({length:3},(_,j)=>{const strand=mesh(new T.CylinderGeometry(.017,.025,1,7),fresh,[0,0,0],station);strand.name=`peeling-tissue-${i}-${j}`;return strand;}));
   const newFace=mask(0,station);newFace.name='regrowing-mask';
   // A gloved hand grips the edge of the mask all the way to release.
   const hand=new T.Group();hand.name='mask-gripping-hand';station.add(hand);
@@ -105,6 +107,11 @@ export function buildMaskPeelingStation({root,ghost,demon,assistant,mesh,subject
       m.position.y+=Math.sin(state.carry*Math.PI)*.45+Math.sin(state.drop*Math.PI)*.2;
       m.quaternion.copy(facing);m.rotateY(-state.peel*.6+state.carry*.9);m.rotateX(-state.drop*1.0);m.rotateZ(state.peel*-.22+state.drop*(i%2?.3:-.3));
       m.scale.setScalar(faceScale*spread*(1-beat.reset));m.visible=m.scale.x>.005;
+      tissue[i].forEach((strand,j)=>{
+        strand.visible=state.peel>.025&&state.carry<.3;
+        const local=new T.Vector3((j-1)*.22,j%2?.23:-.10,.025),from=local.clone().multiplyScalar(faceScale).applyQuaternion(facing).add(initial),to=local.clone().multiplyScalar(m.scale.x).applyQuaternion(m.quaternion).add(m.position),delta=to.clone().sub(from);
+        strand.position.copy(from).lerp(to,.5);strand.scale.set(1,Math.max(.001,delta.length()),1);strand.quaternion.setFromUnitVectors(new T.Vector3(0,1,0),delta.normalize());
+      });
       if(state.peel>0&&state.drop<.05)held=i;
     }
     newFace.position.copy(fitted);newFace.quaternion.copy(facing);newFace.scale.setScalar(faceScale*(beat.regrow*(1-beat.reset)+beat.reset));newFace.visible=beat.regrow>.001;

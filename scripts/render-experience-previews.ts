@@ -6,6 +6,7 @@ import {buildVisitZone,FLOORS} from '../src/world/underworld.ts';
 import {CHARACTERS,characterAsset,type ActorKind} from '../src/world/characters.ts';
 import {PunishmentExperience} from '../src/world/experience.ts';
 import {EXPERIENCE_PROFILES} from '../src/world/experience-profiles.ts';
+import {FLOOR_REVIEW_TIMES} from '../src/world/review-times.ts';
 import {applySpectralParts,captureSpectralRig} from '../src/world/spectral-parts.ts';
 // @ts-ignore: local CPU renderer
 import {SoftwareRenderer,savePNG} from './software-renderer.mjs';
@@ -26,8 +27,9 @@ for(let index=0;index<18;index++){
  const player=actor('spirit',0,5.5,1);scene.add(player);const exp=new PunishmentExperience();let time=0;
  exp.startRun({player,victim:victim!,root:zone.root,bounds:zone.bounds,obstacles:zone.obstacles,profile:EXPERIENCE_PROFILES[index],stageTime:t=>{zone.setPerformanceTime(t);zone.update(time,0);},participant:a=>zone.setParticipant(a),createGuard:()=>actor('demon',-6.8,-.8,1.1),status(){},reaction(){},cleanup(){},finish(){}});
  while(exp.phase!=='performing'&&time<50){time+=1/30;zone.update(time,1/30);exp.update(1/30,time);}
- while(zone.animationTime<EXPERIENCE_PROFILES[index].duration*(index===1?.70:index===3?.58:index===10?.37:index===13?.35:.45)){time+=1/30;zone.update(time,1/30);exp.update(1/30,time);}
+ while(zone.animationTime<FLOOR_REVIEW_TIMES[index]){time+=1/30;zone.update(time,1/30);exp.update(1/30,time);}
  for(const a of actors){const clip=a.root.userData.performanceClip??(a.root.userData.moving?'walk':'idle'),action=a.actions.get(clip)??a.actions.get('idle')!;action.play();action.time=((zone.animationTime+(a.root.userData.phase??0))*(a.root.userData.performanceSpeed??1))%action.getClip().duration;a.mixer.update(0);applySpectralParts(a.mixer.getRoot(),a.root.userData.spectralParts);}
+ zone.finishFrame();
  const camera=new T.PerspectiveCamera(43,width/height,.1,100),shot=exp.cameraHint()!;camera.position.copy(shot.position);camera.lookAt(shot.target);
  const rgb=renderer.render(scene,camera,FLOORS[index].color),name=`floor-${String(index+1).padStart(2,'0')}`;
  await savePNG(`public/assets/experience/${name}.png`,rgb,width,height);

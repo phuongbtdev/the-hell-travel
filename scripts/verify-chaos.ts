@@ -29,7 +29,9 @@ for(let floor=1;floor<=18;floor++){
  const viewer=buildVisitZone(zone,factory);viewer.chaos!.configure(()=>undefined,()=>{},()=>now+5000);
  for(const event of ledger.snapshot(zone,now))viewer.chaos!.receive(event,now,true);
  viewer.update(12.9,1/60);assert.ok(viewer.chaos!.targets.get('apparatus')!.objects.every(o=>!o.visible),'Late viewer missed broken props');viewer.dispose();
- assert.ok(chaos.busy());now+=18001;scene.update(31,.1);assert.ok(prop.objects.every(o=>o.visible),'Apparatus did not recover');assert.equal(chaos.busy(),false);
+ assert.ok(chaos.busy());now+=18001;scene.update(31,.1);
+ const reference=buildVisitZone(zone,factory);reference.update(scene.animationTime,.1);
+ assert.deepEqual(prop.objects.map(o=>o.visible),reference.chaos!.targets.get('apparatus')!.objects.map(o=>o.visible),`Apparatus did not recover to its authored phase on floor ${floor}`);reference.dispose();assert.equal(chaos.busy(),false);
  const crate=ledger.request(player(zone,-5.8,-2),{action:'smash',target:'crate-left'},false,now);assert.ok(crate.event,'Side crate not reachable');
  const elsewhere=buildVisitZone(`floor-${floor===18?1:floor+1}`,factory);assert.equal(elsewhere.chaos!.receive(second.event!,now),false,'Effect leaked between floors');elsewhere.dispose();
  scene.dispose();

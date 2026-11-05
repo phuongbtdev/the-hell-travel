@@ -2,6 +2,7 @@ import { Room, Client } from 'colyseus';
 import { schema, t, type SchemaType } from '@colyseus/schema';
 import { ExperienceQueue } from './ExperienceQueue.js';
 import {ChaosLedger,type ChaosAction} from '../../shared/chaos.js';
+import {cleanSpiritName} from '../../shared/spirit-name.js';
 
 export const PlayerState = schema({
   x: t.number().default(0),
@@ -24,6 +25,7 @@ export const PlayerState = schema({
   moving: t.boolean().default(false),
   ticket: t.number().default(1),
   registered: t.boolean().default(false),
+  name:t.string().default('Vong vô danh'),
   zone: t.string().default('registry'),
 });
 export type PlayerState = SchemaType<typeof PlayerState>;
@@ -92,17 +94,21 @@ export class UnderworldRoom extends Room<{ state: UnderworldState }> {
         if(['approaching','detaining','escorting','positioning','performing','returning'].includes(payload.stage??''))player.experienceStage=payload.stage!;
       }else this.resetPose(client.sessionId);
     },
-    register: (client: Client) => {
+    register: (client: Client,payload:{name?:unknown}={}) => {
       const player = this.state.players.get(client.sessionId);
-      if (!player || player.registered) return;
+      if (!player)return;
+      if(player.registered){client.send('registry:response',{registered:true,name:player.name,ticket:player.ticket});return;}
+      const name=cleanSpiritName(payload?.name);if(!name){client.send('registry:response',{registered:false,reason:'Nhập tên vong hồn trước khi nhận thẻ nhé.'});return;}
+      player.name=name;
       player.registered = true;
-      this.broadcast('registry:registered', { ticket: player.ticket });
+      client.send('registry:response',{registered:true,name:player.name,ticket:player.ticket});
+      this.broadcast('registry:registered', { ticket: player.ticket,name:player.name });
     },
   };
 
   onJoin(client: Client) {
     const ticket = ++this.state.queueLength;
-    this.state.players.set(client.sessionId, new PlayerState({ x: -0.7, z: 5.2, ticket }));
+    this.state.players.set(client.sessionId, new PlayerState({ x: -0.7, z: 5.2, ticket,name:`Vong #${String(ticket).padStart(3,'0')}` }));
     this.broadcast('presence:count', { count: this.clients.length });
   }
 

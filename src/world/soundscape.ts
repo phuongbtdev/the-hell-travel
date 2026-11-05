@@ -2,6 +2,7 @@ import type { SoundMood } from './underworld';
 import { MASK_CYCLE_DURATION, MASK_PEEL_STARTS } from './mask-peeling';
 import { STONE_CYCLE_DURATION, STONE_IMPACT_TIME } from './stone-crush';
 import { NECK_CYCLE_DURATION, NECK_BREAK_TIME, NECK_RELEASE_TIME } from './neck-pull';
+import {GAG_SOUNDS} from './punishment-beats';
 
 export class Soundscape {
   private context?:AudioContext;
@@ -13,6 +14,7 @@ export class Soundscape {
   private lastMaskTime?:number;
   private lastStoneTime?:number;
   private lastNeckTime?:number;
+  private lastGagTime?:number;
   enabled=false;
   setMood(mood:SoundMood){this.mood=mood;if(this.enabled)this.startMusic();}
   async enable(){
@@ -28,7 +30,7 @@ export class Soundscape {
     if(this.music?.getAttribute('src')!==source){this.music?.pause();this.music=new Audio(source);this.music.loop=true;this.music.volume=.25;}
     void this.music.play().catch(()=>{});
   }
-  setZone(zone:string){this.zone=zone;this.lastCue=-100;this.lastMaskTime=undefined;this.lastStoneTime=undefined;this.lastNeckTime=undefined;}
+  setZone(zone:string){this.zone=zone;this.lastCue=-100;this.lastMaskTime=undefined;this.lastStoneTime=undefined;this.lastNeckTime=undefined;this.lastGagTime=undefined;}
   reaction(vowel:'aa'|'oh'|'uu'='aa'){
     const ctx=this.context;if(!this.enabled||!ctx||!this.master)return;
     const now=ctx.currentTime,osc=ctx.createOscillator(),envelope=ctx.createGain(),vibrato=ctx.createOscillator(),vibratoGain=ctx.createGain();
@@ -41,6 +43,12 @@ export class Soundscape {
   }
   tick(time:number,x:number,z:number,stationTime=time){
     if(!this.enabled)return;const i=Number(this.zone.replace('floor-',''))-1;
+    const gag=GAG_SOUNDS[i+1];
+    if(gag){
+      const previous=this.lastGagTime;this.lastGagTime=stationTime;if(previous===undefined||stationTime<previous||stationTime-previous>.3)return;
+      const cycle=Math.floor(stationTime/gag.duration),volume=Math.max(.07,1-Math.hypot(x,z+6)/19),pan=Math.max(-.8,Math.min(.8,-x/10));
+      for(const [at,kind] of gag.events)for(const c of [cycle-1,cycle]){const point=c*gag.duration+at;if(previous<point&&stationTime>=point)this.cue(kind,volume,pan);}return;
+    }
     if(i===13){
       const previous=this.lastNeckTime;this.lastNeckTime=stationTime;
       if(previous===undefined||stationTime<previous||stationTime-previous>.3)return;

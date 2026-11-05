@@ -5,31 +5,34 @@ import { buildMaskPeelingStation } from './mask-peeling';
 import { buildStoneCrushStation } from './stone-crush';
 import { buildNeckPullStation } from './neck-pull';
 import { ChaosScene } from './chaos';
+import {PunishmentVFX,EFFECT_FLOORS} from './punishment-vfx';
+import {buildPunishmentGags} from './punishment-gags';
+import {tongueBeat} from './punishment-beats';
 
 export type SoundMood = 'hall'|'wind'|'fire'|'metal'|'ice'|'water'|'stone'|'beast';
 export const FLOORS: { name:string; story:string; joke:string; mood:SoundMood; color:number }[] = [
-  {name:'Rút Lưỡi',story:'Kẹp đồng và những lời chưa kịp nói.',joke:'Khoan! Cho tôi nói thêm một câu…',mood:'metal',color:0x21383d},
+  {name:'Rút Lưỡi',story:'Lưỡi kéo dài, máu nhỏ xuống. Buông kẹp là quỷ ăn cú bật ngược.',joke:'Khoan! Cho tôi nói thêm một câu…',mood:'metal',color:0x21383d},
   {name:'Kéo Cắt',story:'Quỷ sai cắt tách từng phần hồn rồi gom lại ghép đủ bộ.',joke:'Nhớ ráp đủ giúp tôi. Đừng gửi thiếu mảnh!',mood:'metal',color:0x292b35},
-  {name:'Cây Sắt',story:'Những cành gai vươn lên trong sương lạnh.',joke:'Gỡ người chưa xong, áo quan sai đã mắc trước.',mood:'wind',color:0x19383a},
+  {name:'Cây Sắt',story:'Gai sắt cứa hồn treo. Quỷ lên gỡ lại mắc luôn áo.',joke:'Gỡ người chưa xong, áo quan sai đã mắc trước.',mood:'wind',color:0x19383a},
   {name:'Lột Mặt Nạ',story:'Bóc từng lớp mặt giả. Xe đã đầy mà mặt vẫn chưa hết.',joke:'Bóc tới lớp thứ ba rồi. Sao trên mặt lại mọc thêm nữa?!',mood:'wind',color:0x302336},
-  {name:'Lồng Hấp',story:'Hơi nước cuộn qua lồng sắt và lò gạch.',joke:'Quạt mạnh lên! …Khói lại vào mắt tôi rồi.',mood:'fire',color:0x392c2a},
+  {name:'Lồng Hấp',story:'Hấp đỏ mặt, phồng như bóng. Hai tai xì hơi làm quỷ văng quạt.',joke:'Quạt mạnh lên! …Khói lại vào mắt tôi rồi.',mood:'fire',color:0x392c2a},
   {name:'Cột Đồng',story:'Một trụ đồng đỏ rực giữa điện tối.',joke:'Ôm đúng tư thế! Để tôi làm mẫu… Á!',mood:'fire',color:0x382724},
-  {name:'Núi Đao',story:'Lối lên núi đao gập ghềnh dưới gió.',joke:'Sắp tới rồi! …Vẫn đang ở chân núi.',mood:'metal',color:0x26373b},
+  {name:'Núi Đao',story:'Leo lên rồi trượt qua lưỡi đao. Quỷ cứu hộ lại dính dao vào giày.',joke:'Sắp tới rồi! …Vẫn đang ở chân núi.',mood:'metal',color:0x26373b},
   {name:'Núi Băng',story:'Đường băng xanh chìm trong gió tuyết.',joke:'Áo ấm quá dày. Quan sai không bước nổi.',mood:'ice',color:0x375f72},
   {name:'Vạc Dầu',story:'Vạc đồng sôi sùng sục dưới ánh lửa.',joke:'Bụp! Cả đội giật mình. Lần thứ mười tám.',mood:'fire',color:0x37261f},
-  {name:'Hố Trâu',story:'Móng trâu quỷ vang khắp đấu trường.',joke:'Đuổi người kia! Người kia! Tôi là quan sai!',mood:'beast',color:0x302e29},
+  {name:'Hố Trâu',story:'Trâu húc văng hồn, đầu cắm xuống bệ. Quỷ chỉ đường thành người bị đuổi.',joke:'Đuổi người kia! Người kia! Tôi là quan sai!',mood:'beast',color:0x302e29},
   {name:'Đá Đè',story:'Đá nâng cao, thả xuống. Đầu hồn vỡ tung rồi tự gom lại.',joke:'Đầu cứng thế này… đá có được bảo hành không?',mood:'stone',color:0x30383b},
-  {name:'Chày Cối',story:'Nhịp chày vang giữa gian nhà đá.',joke:'Một, hai, ba! Người chịu phạt đang bắt nhịp.',mood:'stone',color:0x303332},
+  {name:'Chày Cối',story:'Chày nện bẹp hồn, máu bắn. Đầu nảy lên như nút chai.',joke:'Nhẹ tay! Đầu tôi đâu phải nút chai!',mood:'stone',color:0x303332},
   {name:'Ao Máu',story:'Mặt ao đỏ sẫm che những bóng lặng im.',joke:'Khều nãy giờ… chỉ để vớt chiếc dép.',mood:'water',color:0x34262f},
   {name:'Kéo Cổ',story:'Cổ dài tới xà, thân giãy tuột ra. Đầu bật lại như lò xo.',joke:'Đỡ cái đầu! Đỡ cái đầu! Đừng đỡ mỗi cái cổ!',mood:'metal',color:0x332e30},
-  {name:'Phân Thây',story:'Màn xử phạt diễn như một sân khấu rối.',joke:'Kéo nhầm hướng. Linh hồn quay như chong chóng.',mood:'wind',color:0x2b3035},
+  {name:'Phân Thây',story:'Bốn quỷ kéo đứt các phần hồn. Kéo lệch nhịp là quay như chong chóng.',joke:'Kéo nhầm hướng. Linh hồn quay như chong chóng.',mood:'wind',color:0x2b3035},
   {name:'Núi Lửa',story:'Đá nứt, tro bay, dung nham soi đỏ vách núi.',joke:'Đường đang bảo trì. Xin đi vòng… qua núi lửa.',mood:'fire',color:0x43291f},
-  {name:'Cối Xay Đá',story:'Cối đá quay chầm chậm trong nhà xay.',joke:'Quay hăng quá. Giờ quan sai phải chạy theo.',mood:'stone',color:0x293435},
+  {name:'Cối Xay Đá',story:'Cối ép bẹp hồn, máu chảy và mì linh hồn tuôn ra từ khe đá.',joke:'Tôi đăng ký tham quan, đâu đăng ký thành bún!',mood:'stone',color:0x293435},
   {name:'Cưa Xẻ',story:'Hai đầu cưa và một cuộc tranh luận chưa dứt.',joke:'Hai ông thống nhất nhịp trước được không?',mood:'metal',color:0x292d32},
 ];
 
 export type ZoneAction = {position:T.Vector3; radius:number; label:string; destination?:string; line?:string};
-export type VisitZone = {root:T.Group; chaos?:ChaosScene;actions:ZoneAction[]; bounds:{x:number;minZ:number;maxZ:number}; obstacles:T.Box3[];readonly animationTime:number;setPerformanceTime:(time?:number)=>void;setParticipant:(actor?:T.Object3D)=>void;update:(time:number,dt:number)=>void; dispose:()=>void};
+export type VisitZone = {root:T.Group; chaos?:ChaosScene;actions:ZoneAction[]; bounds:{x:number;minZ:number;maxZ:number}; obstacles:T.Box3[];readonly animationTime:number;setPerformanceTime:(time?:number)=>void;setParticipant:(actor?:T.Object3D)=>void;update:(time:number,dt:number)=>void;finishFrame:()=>void; dispose:()=>void};
 export type ActorFactory=(kind:ActorKind,x:number,z:number,scale?:number)=>T.Group;
 const mat=(c:number,extra:Partial<T.MeshStandardMaterialParameters>={})=>new T.MeshStandardMaterial({color:c,roughness:.8,...extra});
 const stone=mat(0x3b4547),dark=mat(0x202b30),wood=mat(0x592f2b),gold=mat(0xc59a58,{metalness:.6,roughness:.4}),iron=mat(0x4e6268,{metalness:.7,roughness:.45}),red=mat(0x912f27),paper=mat(0xd3c09c),ice=mat(0x92cfdf,{metalness:.12,roughness:.22}),lava=mat(0xe86821,{emissive:0xff5410,emissiveIntensity:1.8}),water=mat(0x6c2837,{metalness:.45,roughness:.15});
@@ -39,15 +42,17 @@ export function buildVisitZone(id:string,actor:ActorFactory):VisitZone {
   const root=new T.Group();root.name=id;
   let scriptedTime:number|undefined,animationTime=0,participant:T.Object3D|undefined,victimActor:T.Group|undefined;
   let chaos:ChaosScene|undefined;
-  const actions:ZoneAction[]=[],updates:((t:number,dt:number)=>void)[]=[],disposals:(()=>void)[]=[],owned:T.Mesh[]=[],sprites:T.Sprite[]=[],obstacles:T.Box3[]=[];
+  let punishmentVFX:PunishmentVFX|undefined;
+  const actions:ZoneAction[]=[],updates:((t:number,dt:number)=>void)[]=[],lateUpdates:((t:number,dt:number)=>void)[]=[],disposals:(()=>void)[]=[],owned:T.Mesh[]=[],sprites:T.Sprite[]=[],obstacles:T.Box3[]=[];
   const index=Number(id.replace('floor-',''))-1,isHall=id==='hall';
   const mesh=(g:T.BufferGeometry,m:T.Material,pos:[number,number,number],parent:T.Object3D=root)=>{const o=new T.Mesh(g,m);o.position.set(...pos);o.castShadow=true;o.receiveShadow=true;parent.add(o);owned.push(o);return o;};
   const box=(s:[number,number,number],p:[number,number,number],m:T.Material=stone,parent:T.Object3D=root)=>mesh(new T.BoxGeometry(...s),m,p,parent);
   const cyl=(r:number,h:number,p:[number,number,number],m:T.Material=stone,parent:T.Object3D=root)=>mesh(new T.CylinderGeometry(r,r,h,32),m,p,parent);
   const orb=(r:number,p:[number,number,number],m:T.Material=stone,parent:T.Object3D=root)=>mesh(new T.SphereGeometry(r,24,16),m,p,parent);
   const bar=(a:T.Vector3,b:T.Vector3,r:number,m:T.Material=iron,parent:T.Object3D=root)=>{const delta=b.clone().sub(a);const o=mesh(new T.CylinderGeometry(r,r,delta.length(),12),m,a.clone().add(b).multiplyScalar(.5).toArray() as [number,number,number],parent);o.quaternion.setFromUnitVectors(new T.Vector3(0,1,0),delta.normalize());return o;};
-  const link=(from:()=>T.Vector3,to:()=>T.Vector3,r:number,m:T.Material=iron)=>{const o=mesh(new T.CylinderGeometry(r,r,1,10),m,[0,0,0]);updates.push(()=>{const a=from(),b=to(),delta=b.clone().sub(a);o.position.copy(a).add(b).multiplyScalar(.5);o.scale.y=Math.max(.001,delta.length());o.quaternion.setFromUnitVectors(new T.Vector3(0,1,0),delta.normalize());});return o;};
+  const link=(from:()=>T.Vector3,to:()=>T.Vector3,r:number,m:T.Material=iron)=>{const o=mesh(new T.CylinderGeometry(r,r,1,10),m,[0,0,0]);const follow=()=>{const a=from(),b=to(),delta=b.clone().sub(a);o.position.copy(a).add(b).multiplyScalar(.5);o.scale.y=Math.max(.001,delta.length());o.quaternion.setFromUnitVectors(new T.Vector3(0,1,0),delta.normalize());};updates.push(follow);lateUpdates.push(follow);return o;};
   const subjectPoint=(offset:T.Vector3)=>{const target=participant??victimActor;target?.updateWorldMatrix(true,false);return target?offset.clone().applyMatrix4(target.matrixWorld):offset.clone();};
+  const jointPoint=(name:string,offset:T.Vector3,fallback:T.Vector3)=>{const target=participant??victimActor,bone=target?.getObjectByName(name);if(bone){bone.updateWorldMatrix(true,false);return offset.clone().applyMatrix4(bone.matrixWorld);}return subjectPoint(fallback);};
   const label=(text:string,p:[number,number,number],width=4)=>{const c=document.createElement('canvas');c.width=768;c.height=128;const ctx=c.getContext('2d')!;ctx.fillStyle='rgba(16,24,29,.9)';ctx.fillRect(0,0,768,128);ctx.strokeStyle='#b79052';ctx.strokeRect(4,4,760,120);ctx.font='500 38px system-ui';ctx.fillStyle='#edcea0';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(text,384,66,716);const tex=new T.CanvasTexture(c);tex.colorSpace=T.SRGBColorSpace;const o=new T.Sprite(new T.SpriteMaterial({map:tex,depthWrite:false}));o.position.set(...p);o.scale.set(width,width/6,1);root.add(o);sprites.push(o);return o;};
   const lantern=(x:number,z:number)=>{box([.17,2.8,.17],[x,1.4,z],wood);box([.65,.14,.65],[x,2.5,z],gold);box([.45,.65,.45],[x,2.12,z],lava);box([.62,.13,.62],[x,1.76,z],wood);const l=new T.PointLight(0xffad58,4,9,2);l.position.set(x,2.15,z);root.add(l);};
   const portal=(x:number,z:number,title:string,destination:string)=>{
@@ -107,8 +112,13 @@ export function buildVisitZone(id:string,actor:ActorFactory):VisitZone {
         let grip=point(-1.1,1.6,-5);
         const tongs=new T.Group();root.add(tongs);
         for(const s of [-1,1]){const jaw=box([.95,.06,.06],[0,0,s*.07],iron,tongs);jaw.rotation.y=s*.10;}
-        updates.push(t=>{const mouth=subjectPoint(point(0,participant?1.14:1.27,.28));grip=mouth.clone().add(point(-.65-.22*Math.sin(t*Math.PI),0,0));tongs.position.copy(grip).add(point(-.42,0,0));});
-        link(()=>subjectPoint(point(0,participant?1.14:1.27,.28)),()=>grip,.035,red);
+        const tongueGeometry=new T.CylinderGeometry(1,1,1,10,18),positions=tongueGeometry.getAttribute('position') as T.BufferAttribute,rest=new Float32Array(positions.array);
+        const tongue=mesh(tongueGeometry,mat(0xcf3d50,{roughness:.32}),[0,0,0]);tongue.name='stretching-tongue';tongue.frustumCulled=false;positions.setUsage(T.DynamicDrawUsage);
+        const animateTongue=(t:number)=>{const b=tongueBeat(t),mouth=jointPoint('Head',point(0,participant?.115:-.07,participant?.329:.253),point(0,participant?1.14:1.27,.28));
+          grip=mouth.clone().add(point(-b.length,.05*Math.sin(t*7)*b.pull,0));tongs.position.copy(grip).add(point(-.42,0,0));
+          for(let j=0;j<positions.count;j++){const u=rest[j*3+1]+.5;positions.setXYZ(j,mouth.x+(grip.x-mouth.x)*u,mouth.y+(grip.y-mouth.y)*u-Math.sin(u*Math.PI)*b.pull*.14+rest[j*3]*.035,mouth.z+Math.sin(u*Math.PI)*Math.sin(t*5+u*8)*b.pull*.10+rest[j*3+2]*.11*(1-u*.25));}positions.needsUpdate=true;tongueGeometry.computeVertexNormals();
+        };updates.push(animateTongue);lateUpdates.push(animateTongue);
+        loop(demon,(t,o)=>{const b=tongueBeat(t);o.position.x=-2.2-b.pull*1.2;o.position.y=.35+b.recoil*.35;o.rotation.z=-b.recoil*.75;o.userData.performanceClip=b.recoil>.1?'flail':'pull';});
         const sign=label('CHƯA ĐƯỢC PHÁT BIỂU',[3,2.5,-6],3);loop(sign,(t,o)=>o.position.y=2.5+Math.sin(t)*.05);person('demon',3,-6,.9);break;
       }
       case 1:{
@@ -136,7 +146,7 @@ export function buildVisitZone(id:string,actor:ActorFactory):VisitZone {
       }
       case 3:{
         const assistant=person('guard-blue',3.65,-7,1.05);
-        updates.push(buildMaskPeelingStation({root,ghost,demon,assistant,mesh,subject:()=>participant??ghost}));
+        const peeling=buildMaskPeelingStation({root,ghost,demon,assistant,mesh,subject:()=>participant??ghost});updates.push(peeling);lateUpdates.push(t=>{if(!chaos?.busy())peeling(t);});
         label('BÓC MÃI CHƯA HẾT',[0,4.3,-8.8],4.6);
         label('XE ĐẦY · XIN GỌI THÊM XE',[4.3,2.8,-8.6],4);
         break;
@@ -147,7 +157,7 @@ export function buildVisitZone(id:string,actor:ActorFactory):VisitZone {
         for(let j=0;j<3;j++)box([2,.24,.5],[0,.16+j*.24,-3.2-j*.5],stone);
         for(let j=0;j<12;j++){const puff=orb(.4,[(j%3-1)*.6,2,-6],mat(0xabb5af,{transparent:true,opacity:.15,depthWrite:false}));loop(puff,(t,o)=>{o.position.y=1.4+((t*.5+j*.23)%3.5);o.position.x=Math.sin(t+j)*.8;o.scale.setScalar(.5+((t*.2+j*.1)%1));});}
         pose(ghost,'flail');pose(demon,'pull');demon.rotation.y=-.8;
-        const fan=new T.Group();fan.position.set(-2.2,1.4,-4.9);root.add(fan);const fanBlade=mesh(new T.CircleGeometry(.55,16,0,Math.PI),paper,[0,0,0],fan);fanBlade.material.side=T.DoubleSide;box([.07,.6,.06],[0,-.25,0],wood,fan);loop(fan,(t,o)=>o.rotation.x=Math.sin(t*Math.PI)*.8);break;
+        const fan=new T.Group();fan.name='steam-fan';fan.position.set(-2.2,1.4,-4.9);root.add(fan);const fanBlade=mesh(new T.CircleGeometry(.55,16,0,Math.PI),paper,[0,0,0],fan);fanBlade.material.side=T.DoubleSide;box([.07,.6,.06],[0,-.25,0],wood,fan);loop(fan,(t,o)=>o.rotation.x=Math.sin(t*Math.PI)*.8);break;
       }
       case 5:{
         cyl(.75,4.5,[0,2.25,-6],lava);for(let j=0;j<4;j++)mesh(new T.TorusGeometry(.79,.08,8,36),gold,[0,.5+j*1.1,-6]).rotation.x=Math.PI/2;
@@ -195,7 +205,7 @@ export function buildVisitZone(id:string,actor:ActorFactory):VisitZone {
       }
       case 11:{
         const mortar=mesh(new T.SphereGeometry(1.45,32,16,0,Math.PI*2,Math.PI/2,Math.PI/2),stone,[0,1.6,-6]);mortar.scale.y=.8;mesh(new T.TorusGeometry(1.45,.16,10,40),iron,[0,1.6,-6]).rotation.x=Math.PI/2;
-        const pestle=cyl(.22,3.5,[0,3.2,-6],wood);loop(pestle,(t,o)=>{o.position.y=3.0+(.5+.5*Math.sin(t*Math.PI))*.8;o.rotation.z=.10;});ghost.position.set(.55,.75,-5.7);pose(ghost,'flail');pose(demon,'pound');demon.position.set(-1.8,0,-5.2);demon.rotation.y=Math.PI/2;loop(ghost,(t,o)=>{o.scale.y=.78+(.5+.5*Math.sin(t*Math.PI))*.22;});
+        const pestle=cyl(.22,3.5,[0,3.2,-6],wood);pestle.name='pestle';loop(pestle,(t,o)=>{o.position.y=3.0+(.5+.5*Math.sin(t*Math.PI))*.8;o.rotation.z=.10;});ghost.position.set(.55,.75,-5.7);pose(ghost,'flail');pose(demon,'pound');demon.position.set(-1.8,0,-5.2);demon.rotation.y=Math.PI/2;loop(ghost,(t,o)=>{o.scale.y=.78+(.5+.5*Math.sin(t*Math.PI))*.22;});
         box([.18,3,.18],[-2.5,1.5,-6],wood);link(()=>point(-2.5,2.8,-6),()=>pestle.position.clone().add(point(0,1,0)),.07,wood);
         break;
       }
@@ -214,7 +224,7 @@ export function buildVisitZone(id:string,actor:ActorFactory):VisitZone {
       }
       case 14:{
         const spinner=new T.Group();spinner.position.set(0,1.2,-6);root.add(spinner);ghost.position.set(0,0,0);spinner.add(ghost);pose(ghost,'bound');box([2,.15,.8],[0,.5,-6],wood);
-        for(const s of [-1,1])for(const front of [-1,1]){const anchor=point(s*3,1.3,-6+front*1.4);const guard=pose(person('demon',anchor.x,anchor.z,.9),'pull',1,s+front);guard.rotation.y=-s*Math.PI/2;link(()=>anchor,()=>subjectPoint(point(s*.5,front>0?1.3:.25,front*.08)),.028,paper);}
+        for(const s of [-1,1])for(const front of [-1,1]){const anchor=point(s*3,1.3,-6+front*1.4);const guard=pose(person('demon',anchor.x,anchor.z,.9),'pull',1,s+front);guard.rotation.y=-s*Math.PI/2;const rope=link(()=>anchor,()=>{const spirit=String((participant??ghost).userData.assetId).startsWith('spirit'),name=front>0?(s>0?'LeftHand':'RightHand'):spirit?'TailTip':s>0?'LeftLeg':'RightLeg';return jointPoint(name,front>0?point(0,0,0):spirit?point(s*.08,.1,0):point(0,-.26,.05),point(s*.5,front>0?1.3:.25,front*.08));},.028,paper);rope.name=`dismember-rope-${s}-${front}`;}
         loop(spinner,(t,o)=>o.rotation.y=t*1.3);break;
       }
       case 15:{
@@ -243,6 +253,7 @@ export function buildVisitZone(id:string,actor:ActorFactory):VisitZone {
         break;
       }
     }
+    if([2,3,5,7,10,12,15,17].includes(index+1))updates.push(buildPunishmentGags(index+1,{root,victim:ghost,demon,actors:performers,mesh,subject:()=>participant??ghost}));
     const apparatus=root.children.filter(o=>!existingRoots.has(o)&&!o.userData.isActor);
     updates.forEach(f=>f(0,0));
     chaos=new ChaosScene(id,root);
@@ -254,9 +265,10 @@ export function buildVisitZone(id:string,actor:ActorFactory):VisitZone {
       for(const s of [-1,1])box([.09,.82,.84],[s*.32,0,0],iron,crate);
       chaos.registerProp(key,[crate]);
     }
+    if(EFFECT_FLOORS.includes(index+1))punishmentVFX=new PunishmentVFX(index+1,root);
     obstacles.push(new T.Box3(point(-5,-1,-10.5),point(5,5,-2.8)));
   }
-  return {root,chaos,actions,obstacles,bounds:{x:isHall?12.9:11,minZ:isHall?-17:-15,maxZ:9},get animationTime(){return animationTime;},setPerformanceTime:t=>{scriptedTime=t;},setParticipant:a=>{if(participant&&participant!==a)delete participant.userData.spectralParts;participant=a;},update:(t,dt)=>{chaos?.beforeUpdate();animationTime=scriptedTime??chaos?.timeline(t,dt)??t;updates.forEach(f=>f(animationTime,dt));chaos?.afterUpdate(animationTime,dt);},dispose:()=>{chaos?.dispose();disposals.forEach(f=>f());if(participant)delete participant.userData.spectralParts;const dynamic=new Set<T.Material>();owned.forEach(o=>{o.geometry.dispose();(Array.isArray(o.material)?o.material:[o.material]).forEach(m=>{if(!sharedMaterials.has(m))dynamic.add(m);});});dynamic.forEach(m=>m.dispose());sprites.forEach(s=>{s.material.map?.dispose();s.material.dispose();});root.removeFromParent();}};
+  return {root,chaos,actions,obstacles,bounds:{x:isHall?12.9:11,minZ:isHall?-17:-15,maxZ:9},get animationTime(){return animationTime;},setPerformanceTime:t=>{scriptedTime=t;},setParticipant:a=>{if(participant&&participant!==a)delete participant.userData.spectralParts;participant=a;},update:(t,dt)=>{chaos?.beforeUpdate();animationTime=scriptedTime??chaos?.timeline(t,dt)??t;updates.forEach(f=>f(animationTime,dt));chaos?.afterUpdate(animationTime,dt);if(victimActor)punishmentVFX?.update(animationTime,participant??victimActor,victimActor,!chaos?.busy());},finishFrame:()=>{lateUpdates.forEach(f=>f(animationTime,0));},dispose:()=>{punishmentVFX?.dispose();chaos?.dispose();disposals.forEach(f=>f());if(participant)delete participant.userData.spectralParts;const dynamic=new Set<T.Material>();owned.forEach(o=>{o.geometry.dispose();(Array.isArray(o.material)?o.material:[o.material]).forEach(m=>{if(!sharedMaterials.has(m))dynamic.add(m);});});dynamic.forEach(m=>m.dispose());sprites.forEach(s=>{s.material.map?.dispose();s.material.dispose();});root.removeFromParent();}};
 }
 
 function brownMat(){return mat(0x492d28);}

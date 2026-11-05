@@ -2,7 +2,7 @@
 <html lang="vi">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#101820" />
     <meta name="description" content="Một chuyến tham quan 3D huyền bí qua 18 tầng địa ngục dân gian." />
     <title>18 Tầng Địa Ngục — Cửa Tiếp Dẫn</title>
@@ -10,6 +10,7 @@
   <body>
     <div id="app">
       <canvas id="world" aria-label="Thế giới 3D âm phủ"></canvas>
+      <div id="world-ui" aria-label="Tương tác trong thế giới 3D"></div>
       <div class="vignette"></div>
       <header class="topbar">
         <a class="brand" href="#" aria-label="Cửa Tiếp Dẫn"><span class="brand-mark">18</span><span><b id="zone-name">CỬA TIẾP DẪN</b><small id="zone-subtitle">ÂM PHỦ · KHU GHI DANH</small></span></a>
@@ -31,6 +32,19 @@
         <p class="card-note">Trong lúc chờ xét gọi, bạn được tự do tham quan. Tiểu Sai đang đứng gần cổng.</p>
         <button class="text-button" id="close-card">CẤT THẺ <span>×</span></button>
       </section>
+      <section id="registration-dialog" class="registration-dialog" role="dialog" aria-modal="true" aria-labelledby="registration-title" hidden>
+        <form id="registration-form" class="registration-form" novalidate>
+          <button type="button" id="registration-cancel" class="registration-close" aria-label="Đóng ghi danh">×</button>
+          <p class="eyebrow">BÀN TIẾP DẪN · SỔ GHI DANH</p>
+          <h2 id="registration-title">Vong tên gì?</h2>
+          <p>Thư lại đang chờ. Điền tên cho dễ gọi, chứ “ê vong kia” thì cả hàng cùng quay lại.</p>
+          <label for="spirit-name-input">Tên vong hồn</label>
+          <input id="spirit-name-input" name="spiritName" type="text" maxlength="24" placeholder="Ví dụ: Vong deadline" autocomplete="nickname" enterkeyhint="done" required aria-describedby="registration-error" />
+          <p id="registration-error" class="registration-error" role="alert"></p>
+          <button id="registration-submit" type="submit">Ghi danh · nhận thẻ hồn →</button>
+          <small>Tối đa 24 ký tự · tên sẽ hiện trên thẻ và phía trên nhân vật.</small>
+        </form>
+      </section>
       <aside class="guide-bubble hidden" id="guide-bubble" aria-label="Phụ đề đối thoại" aria-hidden="true">
         <div class="subtitle-heading"><strong id="subtitle-speaker">Tiểu Sai</strong><button id="subtitle-close" aria-label="Đóng phụ đề">×</button></div>
         <p id="guide-line" aria-live="polite"></p>
@@ -40,20 +54,15 @@
       <section class="zone-description hidden" id="zone-description"><span id="zone-number">CHÍNH ĐIỆN</span><h2 id="zone-title">Điện xét xử</h2><p id="zone-story">Bẩm Diêm Vương, nhận thẻ và chọn cổng tham quan.</p><button id="toggle-chaos" hidden aria-pressed="false">Đại náo tầng này</button><button id="experience-punishment" hidden>Trải nghiệm hình phạt</button><button id="read-story">Xem Diêm Vương phán</button></section>
       <section id="chaos-panel" class="chaos-panel" hidden aria-label="Đại náo"><header><strong>ĐẠI NÁO ÂM PHỦ</strong><button id="close-chaos" aria-label="Dừng đại náo">×</button></header><p id="chaos-target">Tới gần quỷ sai hoặc đạo cụ để chọc phá.</p><div class="chaos-actions"><button id="chaos-hit"><kbd>F</kbd> Đánh quỷ sai</button><button id="chaos-smash"><kbd>G</kbd> Phá đồ</button><button id="chaos-pants"><kbd>R</kbd> Kéo quần</button></div><div class="chaos-heat"><progress id="chaos-heat" max="5" value="0" aria-label="Độ quậy"></progress><span id="chaos-heat-label">Chưa bị để ý</span></div><small id="chaos-note">Đi vào sân khấu, lại gần mục tiêu rồi ra tay.</small></section>
       <section class="experience-status hidden" id="experience-status" aria-label="Trải nghiệm hình phạt"><div><strong id="experience-phase">Quỷ sai đang đến đón</strong><span id="experience-time"></span></div><button id="stop-experience">Dừng · Esc</button></section>
-      <section class="floor-cinema hidden" id="floor-cinema"><header><span>GÓC DIỄN CẬN CẢNH</span><button id="expand-film" aria-label="Phóng to video">↗</button></header><video id="scene-film" muted loop playsinline controls preload="none" aria-label="Video màn diễn của tầng hiện tại"></video></section>
+      <section class="floor-cinema hidden" id="floor-cinema"><header><button id="expand-film" type="button" aria-label="Mở video cận cảnh" aria-expanded="false" aria-controls="scene-film"><span>Xem cận cảnh</span><b aria-hidden="true">↗</b></button></header><video id="scene-film" muted loop playsinline controls preload="none" aria-label="Video màn diễn của tầng hiện tại"></video></section>
       <section class="map-panel hidden" id="map-panel" role="dialog" aria-label="Bản đồ 18 tầng"><header><div><p>THẺ THAM QUAN ÂM PHỦ</p><h2>Thập bát địa ngục</h2><small id="visit-progress">Đã đến 0 / 18 tầng</small></div><button id="close-map" aria-label="Đóng bản đồ">×</button></header><p class="map-hint">Chọn một tầng để đi qua cổng. Bạn có thể tự do quay lại bất cứ lúc nào.</p><div id="floor-list"></div></section>
       <div id="scene-fade"></div>
       <div class="hud hidden" id="hud">
         <div class="hud-ticket"><span>THẺ HỒN</span><b id="hud-ticket-number">—</b></div>
-        <div class="hud-help"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> DI CHUYỂN <span>·</span> KÉO CHUỘT XOAY GÓC NHÌN</div>
+        <div class="hud-help">NHẤP / CHẠM MẶT ĐẤT ĐỂ ĐI <span>·</span> BẤM NÚT TRÊN NPC ĐỂ TƯƠNG TÁC</div>
         <button id="sound-hud" aria-label="Tắt âm thanh">♫</button>
       </div>
-      <div class="interaction hidden" id="interaction"><kbd>E</kbd><span id="interaction-label">Nói chuyện</span></div>
       <div class="toast" id="toast" role="status"></div>
-      <div class="mobile-controls hidden" id="mobile-controls">
-        <div class="dpad"><button data-dir="forward">▲</button><div><button data-dir="left">◀</button><button data-dir="back">▼</button><button data-dir="right">▶</button></div></div>
-        <button class="mobile-action" id="mobile-interact">E</button>
-      </div>
       <footer class="footer"><span>THẺ THAM QUAN CÓ HIỆU LỰC ĐẾN KHI ĐƯỢC GỌI TÊN</span><span>✦</span></footer>
     </div>
     <script type="module" src="/src/main.ts"></script>

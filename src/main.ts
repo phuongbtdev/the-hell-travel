@@ -11,11 +11,17 @@ import { Subtitles } from './world/subtitles';
 import { PunishmentExperience,ESCORT_MIN_DISTANCE,type ExperiencePhase } from './world/experience';
 import { EXPERIENCE_PROFILES } from './world/experience-profiles';
 import { applySpectralParts,captureSpectralRig } from './world/spectral-parts';
-import { stoneCameraShake } from './world/stone-crush';
 import {ChaosLedger,type ChaosAction,type ChaosEvent} from '../shared/chaos';
+import {cleanSpiritName} from '../shared/spirit-name';
+import {WalkMap,ClickNavigator} from './world/navigation';
+import {StableCameraRig} from './world/camera-rig';
+import {WorldUI,type WorldHotspot,type WorldButton,isWorldTap} from './world/world-ui';
+import {PUNISHMENT_MEDIA_REVISION} from './world/review-times';
 import './style.css';
+import './mobile.css';
+import {GameScreen} from './world/screen-layout';
 
-type RemotePlayerState = { x: number; z: number; yaw: number; moving: boolean; ticket: number; zone:string;y:number;pitch:number;roll:number;sx:number;sy:number;sz:number;clip:string;experienceStage:string;stageTime:number;escortX:number;escortZ:number;escortYaw:number;escortMoving:boolean;escortClip:string };
+type RemotePlayerState = { x: number; z: number; yaw: number; moving: boolean; ticket: number;name:string; zone:string;y:number;pitch:number;roll:number;sx:number;sy:number;sz:number;clip:string;experienceStage:string;stageTime:number;escortX:number;escortZ:number;escortYaw:number;escortMoving:boolean;escortClip:string };
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const activeMixers = new Set<THREE.AnimationMixer>();
@@ -79,7 +85,15 @@ const camera = new THREE.PerspectiveCamera(43, innerWidth / innerHeight, 0.1, 16
 camera.position.set(0, 5.6, 15);
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 1.7));
-renderer.setSize(innerWidth, innerHeight);
+const gameScreen=new GameScreen($('app'),[
+ document.querySelector('.topbar') as HTMLElement,$('travel-nav'),$('zone-description'),$('floor-cinema'),$('guide-bubble'),$('chaos-panel'),$('experience-status'),$('hud'),document.querySelector('.footer') as HTMLElement,$('registration-card'),
+],({width,height})=>{
+ camera.aspect=width/height;camera.updateProjectionMatrix();
+ const ratio=Math.min(devicePixelRatio,1.7);
+ if(renderer.getPixelRatio()!==ratio)renderer.setPixelRatio(ratio);
+ const current=renderer.getSize(new THREE.Vector2());
+ if(current.x!==width||current.y!==height)renderer.setSize(width,height,false);
+});
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -197,7 +211,7 @@ function makeSpirit(color = 0x78d7d5, withLantern = false) {
   return root;
 }
 const player = makeSpirit(0x78d7d5, true); player.position.set(0, 0, 4.5); scene.add(player);
-const guide = new THREE.Group(); guide.position.set(-4.3, 0, -1.6); guide.rotation.y = .32; scene.add(guide);
+const guide = new THREE.Group();guide.userData.assetId='guide'; guide.position.set(-4.3, 0, -1.6); guide.rotation.y = .32; scene.add(guide);
 const guideBody = new THREE.Mesh(new THREE.CapsuleGeometry(.35, .67, 4, 10), new THREE.MeshStandardMaterial({ color: 0x9c3029, roughness: .78 })); guideBody.position.y = .83; guide.add(guideBody);
 const guideHead = new THREE.Mesh(new THREE.SphereGeometry(.39, 14, 12), new THREE.MeshStandardMaterial({ color: 0xd7563f, roughness: .78 })); guideHead.position.y = 1.66; guide.add(guideHead);
 for (const side of [-1, 1]) { const horn = new THREE.Mesh(new THREE.ConeGeometry(.13, .44, 8), mats.gold); horn.position.set(side * .28, 2.02, 0); horn.rotation.z = side * -.45; guide.add(horn); }
@@ -208,7 +222,7 @@ const guideFallback = new THREE.Group();
 guide.add(guideFallback);
 attachRiggedModel(guide, guideFallback, '/models/tieu-sai.glb', 1.85);
 // Record-keeper at the counter.
-const clerk = new THREE.Group(); clerk.position.set(-5.8, 0, .1); clerk.rotation.y = Math.PI; scene.add(clerk);
+const clerk = new THREE.Group();clerk.userData.assetId='clerk'; clerk.position.set(-5.8, 0, .1); clerk.rotation.y = Math.PI; scene.add(clerk);
 const clerkBody = new THREE.Mesh(new THREE.CapsuleGeometry(.3, .52, 4, 8), new THREE.MeshStandardMaterial({ color: 0x24363a })); clerkBody.position.y = .73; clerk.add(clerkBody);
 const clerkHead = new THREE.Mesh(new THREE.SphereGeometry(.33, 12, 10), new THREE.MeshStandardMaterial({ color: 0x557779 })); clerkHead.position.y = 1.47; clerk.add(clerkHead);
 const clerkHat = new THREE.Mesh(new THREE.CylinderGeometry(.27, .33, .5, 8), mats.darkStone); clerkHat.position.y = 1.84; clerk.add(clerkHat);
@@ -224,8 +238,17 @@ scene.add(registryEnvironment);
 
 const clock = new THREE.Clock();
 const keys = new Set<string>();
-let registered = false, entered = false, audioEnabled = false, currentTicket = 0, room: any, localSessionId = '', cameraYaw = 0, cameraPitch = .13, dragging = false, lastPointerX = 0, lastPointerY = 0;
-let velocity = new THREE.Vector3();
+let registered = false, entered = false, audioEnabled = false, currentTicket = 0, room: any, localSessionId = '';
+let registrationOpen=false,registrationPending=false,registrationTimer=0,travelling=false;
+const savedName=()=>{try{return cleanSpiritName(localStorage.getItem('underworld.name'));}catch{return '';}};
+let spiritName=savedName();
+const registryBounds={x:10.5,minZ:-31,maxZ:9};
+const registryObstacles=[new THREE.Box3(new THREE.Vector3(-7.95,-1,.35),new THREE.Vector3(-3.65,3,1.95)),...[-1,1].map(side=>new THREE.Box3(new THREE.Vector3(side*5.2-1.1,-1,-9.2),new THREE.Vector3(side*5.2+1.1,9,-6.8)))];
+const navigator=new ClickNavigator(new WalkMap(registryBounds,registryObstacles));
+const velocity=navigator.velocity,cameraRig=new StableCameraRig();cameraRig.reset(player.position);
+const worldUI=new WorldUI($('world-ui'),activateHotspot);
+const destinationMarker=new THREE.Mesh(new THREE.TorusGeometry(.25,.026,6,32),new THREE.MeshBasicMaterial({color:0xf4c16e,transparent:true,opacity:.85,depthWrite:false}));destinationMarker.rotation.x=-Math.PI/2;destinationMarker.visible=false;scene.add(destinationMarker);
+const pointerRay=new THREE.Raycaster(),groundPlane=new THREE.Plane(new THREE.Vector3(0,1,0),0);
 const remotes = new Map<string, { root: THREE.Group; target: THREE.Vector3; yaw: number; moving: boolean; zone:string;rotation:THREE.Quaternion;scale:THREE.Vector3;clip:string;mode:string;stageTime:number;renderTime:number;escortTarget:THREE.Vector3;escortYaw:number;escortMoving:boolean;escortClip:string;escort?:THREE.Group }>();
 const soundscape = new Soundscape();
 // Cancel speech queued by a previous version during a live reload.
@@ -244,7 +267,6 @@ let experienceReplyTimer=0;
 let chaosMode=false,chaosPendingUntil=0,filmSuppressed=false;
 const soloChaos=new ChaosLedger(),chaosEmotes=new Map<string,{kind:ChaosAction;until:number}>();
 let chaosHeat={value:0,at:0};
-const cameraLookTarget=new THREE.Vector3(0,1.15,4.5);
 const startAmbient = (zone: string) => {
   const floor=FLOORS[Number(zone.replace('floor-',''))-1];
   soundscape.setMood(floor?.mood??'hall');
@@ -256,13 +278,78 @@ $('sound-toggle').addEventListener('click', toggleAudio); $('sound-hud').addEven
 
 function showToast(message: string) { const toast = $('toast'); toast.textContent = message; toast.classList.add('show'); window.setTimeout(() => toast.classList.remove('show'), 2600); }
 function showGuide(message:string,speaker:Speaker='guide'){subtitles.show([{speaker,text:message}]);}
+function closeRegistration(){registrationOpen=false;$('registration-dialog').hidden=true;($('spirit-name-input') as HTMLInputElement).blur();}
+function openRegistration(){
+  if(registered){$('registration-card').classList.remove('hidden');return;}
+  navigator.cancel();keys.clear();closeMap();subtitles.clear();registrationOpen=true;$('registration-dialog').hidden=false;
+  const input=$('spirit-name-input') as HTMLInputElement;input.value=spiritName;$('registration-error').textContent='';input.focus({preventScroll:true});
+}
+function acceptRegistration(name:string,ticket:number,showCard=true){
+  window.clearTimeout(registrationTimer);registrationPending=false;($('registration-submit') as HTMLButtonElement).disabled=false;
+  spiritName=cleanSpiritName(name);registered=true;currentTicket=Math.max(1,ticket);player.userData.spiritName=spiritName;
+  try{localStorage.setItem('underworld.name',spiritName);}catch{}
+  closeRegistration();$('spirit-name').textContent=spiritName;
+  for(const id of ['ticket-number','hud-ticket-number'])$(id).textContent=String(currentTicket).padStart(3,'0');
+  if(showCard){$('registration-card').classList.remove('hidden');showToast(`Đã ghi danh ${spiritName}. Mời vong tự do tham quan!`);soundscape.cue('stamp');}
+}
+$('registration-form').addEventListener('submit',event=>{
+  event.preventDefault();if(registrationPending)return;
+  const name=cleanSpiritName(($('spirit-name-input') as HTMLInputElement).value);
+  if(!name){$('registration-error').textContent='Tên vong hồn không được để trống nhé.';return;}
+  spiritName=name;navigator.cancel();
+  if(!room){acceptRegistration(name,Math.max(1,currentTicket));return;}
+  registrationPending=true;($('registration-submit') as HTMLButtonElement).disabled=true;$('registration-error').textContent='Thư lại đang đóng dấu…';
+  sendRoom('register',{name});registrationTimer=window.setTimeout(()=>{registrationPending=false;($('registration-submit') as HTMLButtonElement).disabled=false;$('registration-error').textContent='Chưa nhận được thẻ. Bấm ghi danh để thử lại nhé.';},5000);
+});
+$('registration-cancel').addEventListener('click',closeRegistration);
+function talkToGuide(){greetActor(guide);const floor=FLOORS[Number(currentZone.replace('floor-',''))-1];showGuide(floor?.joke??(registered?'Bấm mặt đất để đi. Mời ngài ghé Chính Điện hoặc chọn tầng trên bản đồ.':'Bấm nút Ghi danh trên đầu Thư lại ở bàn bên trái, rồi điền tên vong hồn nhé!'));soundscape.cue('bell');}
+function configureWalking(){navigator.setMap(new WalkMap(activeVisit?.bounds??registryBounds,chaosMode?[]:activeVisit?.obstacles??registryObstacles));}
+function activateHotspot(entry:WorldHotspot,action:WorldButton){
+  if(!entered||travelling||mapOpen||registrationOpen||experience.active||entry.object?.userData.disposed||action.disabled?.())return;
+  const point=entry.approach?.()??entry.anchor().setY(0),radius=entry.range??2.5;
+  if(Math.hypot(player.position.x-point.x,player.position.z-point.z)<=radius){navigator.cancel();keys.clear();action.run();return;}
+  subtitles.clear();if(!navigator.go(player.position,point,()=>activateHotspot(entry,action),radius))showToast('Chưa tìm được lối tới chỗ này. Thử bấm một điểm gần hơn nhé.');
+}
+function rebuildWorldUI(){
+  const anchor=(actor:THREE.Object3D)=>()=>{const asset=characterAsset((actor.userData.assetId??'guide') as ActorKind),height=(asset?.height??1.85)*actor.scale.y;return actor.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3(0,height+.25,0));};
+  const entries:WorldHotspot[]=[{id:'guide',title:'Tiểu Sai',anchor:anchor(guide),approach:()=>guide.position.clone(),object:guide,range:2.8,priority:10,actions:[{label:'Trò chuyện',run:talkToGuide}]}];
+  if(currentZone==='registry'){
+    entries.push({id:'clerk',title:'Thư lại tiếp dẫn',anchor:anchor(clerk),approach:()=>new THREE.Vector3(-5.8,0,2.65),object:clerk,range:1.65,priority:30,showDistance:9,actions:[{label:()=>registered?'Xem thẻ hồn':'Ghi danh · nhập tên',run:openRegistration}]});
+    entries.push({id:'enter-hall',title:'Lối vào Chính Điện',anchor:()=>new THREE.Vector3(0,3,-29),approach:()=>new THREE.Vector3(0,0,-27),range:3,showDistance:10,priority:8,actions:[{label:'Vào Chính Điện',run:()=>travelTo('hall')}]});
+  }
+  activeVisit?.actions.forEach((a,index)=>{
+    let object:THREE.Object3D|undefined;
+    if(currentZone==='hall'&&!a.destination)activeVisit!.root.traverse(o=>{if(o.userData.assetId==='judge')object=o;});
+    entries.push({id:`action-${index}`,title:object?'Diêm Vương':a.destination?'Cổng tham quan':'Chuyện tầng này',anchor:object?anchor(object):()=>a.position.clone().add(new THREE.Vector3(0,a.destination?2.7:1.25,0)),approach:()=>a.position.clone(),object,range:Math.max(.8,a.radius*.8),showDistance:object?9:a.destination?5.5:4.3,priority:object?25:a.destination?5:1,actions:[{label:object?'Nghe Diêm Vương phán':a.label,run:()=>{if(a.destination)travelTo(a.destination);else readScene();}}]});
+  });
+  activeVisit?.chaos?.targets.forEach(target=>{
+    if(!target.actor)return;const actor=target.actor,id=target.definition.id;
+    entries.push({id:`npc-${id}`,title:target.definition.name,anchor:anchor(actor),object:actor,approach:()=>chaosMode?actor.position.clone():new THREE.Vector3(THREE.MathUtils.clamp(actor.position.x,-3.7,3.7),0,-1.5),range:chaosMode?2.2:2.1,showDistance:7,priority:15,actions:[
+      {label:'Chuyện tầng này',run:readScene,visible:()=>!chaosMode},
+      {label:'Trải nghiệm',run:()=>($('experience-punishment') as HTMLButtonElement).click(),visible:()=>!chaosMode,disabled:()=>Boolean(activeVisit?.chaos?.busy())||experienceRequested},
+      {label:'Đánh quỷ sai',run:()=>doChaos('hit',id),visible:()=>chaosMode},
+      {label:'Kéo quần',run:()=>doChaos('pants',id),visible:()=>chaosMode},
+    ]});
+  });
+  activeVisit?.chaos?.targets.forEach(target=>{if(target.actor)return;entries.push({id:`prop-${target.definition.id}`,title:target.definition.name,anchor:()=>activeVisit!.chaos!.point(target).add(new THREE.Vector3(0,1.0,0)),approach:()=>activeVisit!.chaos!.point(target),range:2.2,showDistance:5,priority:5,visible:()=>chaosMode&&target.objects.some(o=>o.visible),actions:[{label:'Phá đồ',run:()=>doChaos('smash',target.definition.id)}]});});
+  entries.push({id:'self-name',title:()=>spiritName,anchor:()=>player.position.clone().add(new THREE.Vector3(0,2.05,0)),showDistance:Infinity,priority:-2,visible:()=>registered,actions:[]});
+  for(const [id,remote] of remotes)entries.push({id:`name-${id}`,title:()=>String(remote.root.userData.spiritName??'Vong vô danh'),anchor:()=>remote.root.position.clone().add(new THREE.Vector3(0,2.05,0)),showDistance:14,priority:-3,visible:()=>remote.zone===currentZone,actions:[]});
+  worldUI.replace(entries);
+}
 function readScene(){
   if(experience.active)return;
+  navigator.cancel();
   if(currentZone==='hall'){subtitles.show(judgeVerdict(currentTicket,visited.size));return;}
   const i=Number(currentZone.replace('floor-',''))-1;if(FLOORS[i])subtitles.show(floorNarration(i,FLOORS[i].name));
 }
 $('read-story').addEventListener('click',readScene);
-$('expand-film').addEventListener('click',()=>{$('floor-cinema').classList.toggle('expanded');});
+function expandFilm(expanded:boolean){
+ $('floor-cinema').classList.toggle('expanded',expanded);document.body.classList.toggle('film-expanded',expanded);
+ const button=$('expand-film');button.setAttribute('aria-expanded',String(expanded));
+ button.querySelector('span')!.textContent=expanded?'Đóng cận cảnh':'Xem cận cảnh';button.querySelector('b')!.textContent=expanded?'×':'↗';
+ button.setAttribute('aria-label',expanded?'Đóng video cận cảnh':'Mở video cận cảnh');
+}
+$('expand-film').addEventListener('click',()=>expandFilm(!$('floor-cinema').classList.contains('expanded')));
 function distanceXZ(a: THREE.Object3D, b: THREE.Object3D) { return Math.hypot(a.position.x - b.position.x, a.position.z - b.position.z); }
 function createZoneActor(kind:ActorKind,x:number,z:number,scale=1) {
   const a=new THREE.Group();a.position.set(x,0,z);a.scale.setScalar(scale);a.userData.isActor=true;a.userData.assetId=kind;
@@ -271,11 +358,13 @@ function createZoneActor(kind:ActorKind,x:number,z:number,scale=1) {
 }
 function cleanupActor(actor:THREE.Object3D){actor.traverse(o=>{o.userData.disposed=true;const controller=riggedActors.get(o as THREE.Group);if(controller){activeMixers.delete(controller.mixer);controller.mixer.stopAllAction();riggedActors.delete(o as THREE.Group);}});}
 function sendRoom(type:string,payload:unknown={}){if(room)try{room.send(type,payload);}catch{}}
-function refreshExperienceButton(){const button=$('experience-punishment') as HTMLButtonElement;button.disabled=experience.active||experienceRequested;button.textContent=experience.active?'Đang trải nghiệm…':experienceRequested?'Đang chờ quỷ sai…':'Trải nghiệm hình phạt';}
+function refreshExperienceButton(){document.body.classList.toggle('experience-waiting',experienceRequested);const button=$('experience-punishment') as HTMLButtonElement;button.disabled=experience.active||experienceRequested;button.textContent=experience.active?'Đang trải nghiệm…':experienceRequested?'Đang chờ quỷ sai…':'Trải nghiệm hình phạt';}
 function setChaosMode(enabled:boolean){
+  navigator.cancel();
   chaosMode=enabled&&Boolean(activeVisit?.chaos)&&!experience.active&&!experienceRequested;
+  configureWalking();
   document.body.classList.toggle('chaos-mode',chaosMode);$('chaos-panel').hidden=!chaosMode;$('toggle-chaos').setAttribute('aria-pressed',String(chaosMode));$('toggle-chaos').textContent=chaosMode?'Dừng đại náo':'Đại náo tầng này';
-  if(chaosMode){subtitles.clear();closeMap();showToast('F đánh quỷ sai · G phá đồ · R kéo quần. Coi chừng bị đuổi!');}else activeVisit?.chaos?.highlight();
+  if(chaosMode){subtitles.clear();closeMap();showToast('Bấm nút trên lính hoặc đạo cụ để chọc phá. Coi chừng bị đuổi!');}else activeVisit?.chaos?.highlight();
 }
 function receiveChaos(event:ChaosEvent,serverNow:number,silent=false){
   const chaos=activeVisit?.chaos;if(!chaos||!chaos.receive(event,serverNow,silent))return;
@@ -286,9 +375,9 @@ function receiveChaos(event:ChaosEvent,serverNow:number,silent=false){
     if(local){chaosPendingUntil=Date.now()+750;chaosHeat={value:event.heat,at:Date.now()};showToast(event.action==='pants'?'Lộ quần đùi trái tim! Quỷ sai: “Trả quần đây!”':event.action==='hit'?'Bốp! Quỷ sai choáng, màn thi hành tạm dừng.':event.hp===0?'Choang! Đạo cụ vỡ. Quỷ sai sẽ dựng lại sau 18 giây.':'Đồ đã nứt · đập thêm một lần nữa!');}
   }
 }
-function doChaos(action:ChaosAction){
+function doChaos(action:ChaosAction,targetId?:string){
   if(!entered||!chaosMode||experience.active||experienceRequested||mapOpen||Date.now()<chaosPendingUntil)return;
-  const chaos=activeVisit?.chaos,target=chaos?.nearest(action,player.position);if(!target){showToast(action==='smash'?'Lại gần đạo cụ hoặc thùng dụng cụ.':'Lại gần quỷ sai đang thi hành án.');return;}
+  const chaos=activeVisit?.chaos,target=targetId?chaos?.targets.get(targetId):chaos?.nearest(action,player.position);if(!target||chaos!.point(target).clone().sub(player.position).setY(0).length()>2.85){showToast(action==='smash'?'Lại gần đạo cụ hoặc thùng dụng cụ.':'Lại gần quỷ sai đang thi hành án.');return;}navigator.cancel();
   const point=chaos!.point(target);player.rotation.y=Math.atan2(point.x-player.position.x,point.z-player.position.z);subtitles.clear();
   const request={action,target:target.definition.id};chaosPendingUntil=Date.now()+1200;
   if(room){sendRoom('move',{x:player.position.x,z:player.position.z,yaw:player.rotation.y,moving:false});sendRoom('chaos:action',request);}
@@ -317,6 +406,7 @@ function stopExperience(){
   if(experienceRequested)sendRoom('experience:stop');experienceRequested=false;requestedExperienceZone='';$('experience-status').classList.add('hidden');refreshExperienceButton();
 }
 function beginLocalExperience(){
+  navigator.cancel();
   experienceRequested=false;refreshExperienceButton();
   let victim:THREE.Object3D|undefined;activeVisit?.root.traverse(o=>{if(o.userData.role==='victim')victim=o;});
   if(!activeVisit||!victim||currentZone!==requestedExperienceZone){sendRoom('experience:stop');stopExperience();return;}
@@ -345,27 +435,28 @@ function refreshMap(){
 function travelTo(id:string){
   if(id!=='registry'&&id!=='hall'&&!/^floor-([1-9]|1[0-8])$/.test(id))return;
   if(!registered&&id!=='registry'){showGuide('Xin ghé quầy ghi danh nhận thẻ hồn trước nhé. Quầy ở bên trái đường đá.');closeMap();return;}
-  stopExperience();setChaosMode(false);chaosPendingUntil=0;
+  travelling=true;closeRegistration();navigator.cancel();stopExperience();setChaosMode(false);chaosPendingUntil=0;
   closeMap();subtitles.clear();$('registration-card').classList.add('hidden');$('scene-fade').classList.add('active');keys.clear();velocity.set(0,0,0);
   window.setTimeout(()=>{
-    currentFilm?.dispose();currentFilm=undefined;filmSuppressed=false;$('floor-cinema').classList.add('hidden');$('floor-cinema').classList.remove('expanded');
+    currentFilm?.dispose();currentFilm=undefined;filmSuppressed=false;$('floor-cinema').classList.add('hidden');expandFilm(false);
     if(activeVisit){activeVisit.root.traverse(o=>{o.userData.disposed=true;const c=riggedActors.get(o as THREE.Group);if(c){activeMixers.delete(c.mixer);c.mixer.stopAllAction();riggedActors.delete(o as THREE.Group);}});activeVisit.dispose();activeVisit=undefined;}
     currentZone=id;registryEnvironment.visible=id==='registry';queue.visible=id==='registry';clerk.visible=id==='registry';
+    document.body.dataset.zone=id;
     if(id!=='registry'){activeVisit=buildVisitZone(id,createZoneActor);scene.add(activeVisit.root);}
     activeVisit?.chaos?.configure(sid=>sid===(room?localSessionId:'local')?player:remotes.get(sid)?.zone===currentZone?remotes.get(sid)?.root:undefined,(sid,kind)=>{if(kind==='caught'&&sid===(room?localSessionId:'local')){showToast('Bắt quả tang! Quỷ sai gõ đầu: “Quậy nữa ta mách Diêm Vương!”');soundscape.cue('thud');}});
     if(!room)for(const e of soloChaos.snapshot(id))receiveChaos(e,Date.now(),true);
     const f=FLOORS[Number(id.replace('floor-',''))-1];
-    if(f){visited.add(Number(id.replace('floor-','')));localStorage.setItem('underworld.visited',JSON.stringify([...visited]));}
-    if(f){const n=String(Number(id.replace('floor-',''))).padStart(2,'0');currentFilm=attachLoopVideo(scene,`/video/floors/floor-${n}.mp4`,new THREE.Vector3(7,3.2,-7),new THREE.Vector2(4,2.25),{video:$('scene-film') as HTMLVideoElement,poster:`/video/floors/floor-${n}.png`});$('floor-cinema').classList.remove('hidden');void currentFilm.play().catch(()=>showToast('Bấm phát trong ô video để xem màn diễn.'));}
+    if(f){visited.add(Number(id.replace('floor-','')));try{localStorage.setItem('underworld.visited',JSON.stringify([...visited]));}catch{}}
+    if(f){const n=String(Number(id.replace('floor-',''))).padStart(2,'0');currentFilm=attachLoopVideo(scene,`/video/floors/floor-${n}.mp4?v=${PUNISHMENT_MEDIA_REVISION}`,new THREE.Vector3(7,3.2,-7),new THREE.Vector2(4,2.25),{video:$('scene-film') as HTMLVideoElement,poster:`/video/floors/floor-${n}.png?v=${PUNISHMENT_MEDIA_REVISION}`});$('floor-cinema').classList.remove('hidden');void currentFilm.play().catch(()=>showToast('Bấm phát trong ô video để xem màn diễn.'));}
     const color=f?.color??0x172128;scene.background=new THREE.Color(color);scene.fog=new THREE.FogExp2(color,id==='hall'?.013:.022);
-    player.position.set(0,0,id==='registry'?4.5:5.5);player.rotation.y=Math.PI;cameraYaw=0;cameraPitch=.13;camera.position.set(0,3.8,12);
+    player.position.set(0,0,id==='registry'?4.5:5.5);player.rotation.y=Math.PI;configureWalking();cameraRig.reset(player.position);
     guide.position.set(id==='registry'?-4.3:3.5,0,id==='registry'?-1.6:5.3);guide.rotation.y=id==='registry'?.32:-.7;
     $('zone-name').textContent=f?`TẦNG ${id.replace('floor-','')} · ${f.name.toLocaleUpperCase('vi')}`:id==='hall'?'CHÍNH ĐIỆN':'CỬA TIẾP DẪN';
     $('zone-subtitle').textContent=f?'THẬP BÁT ĐỊA NGỤC · KHÁCH THAM QUAN':id==='hall'?'ĐIỆN XÉT XỬ · 18 CỔNG THAM QUAN':'ÂM PHỦ · KHU GHI DANH';
     $('zone-description').classList.toggle('hidden',id==='registry');$('zone-number').textContent=f?`TẦNG ${id.replace('floor-','')} / 18`:'CHÍNH ĐIỆN';$('zone-title').textContent=f?.name??'Điện xét xử';$('zone-story').textContent=f?.story??'Bẩm Diêm Vương hoặc chọn một trong 18 cổng hai bên điện.';
     $('read-story').textContent=id==='hall'?'Xem Diêm Vương phán':'Đọc chuyện tội và phạt';
     $('experience-punishment').hidden=!f;$('toggle-chaos').hidden=!f;refreshExperienceButton();
-    startAmbient(id);soundscape.setZone(id);subtitles.show(zoneDialogue(id));soundscape.cue('portal');refreshMap();room?.send('zone',{zone:id});sendRoom('chaos:sync');$('scene-fade').classList.remove('active');
+    startAmbient(id);soundscape.setZone(id);subtitles.show(zoneDialogue(id));soundscape.cue('portal');refreshMap();room?.send('zone',{zone:id});sendRoom('chaos:sync');$('scene-fade').classList.remove('active');travelling=false;rebuildWorldUI();
     if(visited.size===18)showToast('Đã tham quan đủ 18 tầng. Mời trở về Chính Điện!');
   },160);
 }
@@ -376,23 +467,15 @@ function nearestWorldAction():ZoneAction|undefined {
 $('floor-list').innerHTML=FLOORS.map((f,i)=>`<button data-floor="${i+1}"><small>TẦNG ${String(i+1).padStart(2,'0')}</small>${f.name}</button>`).join('');
 $('floor-list').querySelectorAll<HTMLButtonElement>('button').forEach(b=>b.addEventListener('click',()=>travelTo(`floor-${b.dataset.floor}`)));
 $('go-registry').addEventListener('click',()=>travelTo('registry'));$('go-hall').addEventListener('click',()=>travelTo('hall'));
-$('open-map').addEventListener('click',()=>{stopExperience();mapOpen=true;keys.clear();refreshMap();$('map-panel').classList.remove('hidden');});$('close-map').addEventListener('click',closeMap);
+$('open-map').addEventListener('click',()=>{navigator.cancel();stopExperience();mapOpen=true;keys.clear();refreshMap();$('map-panel').classList.remove('hidden');});$('close-map').addEventListener('click',closeMap);
 function interact() {
   if(!entered||mapOpen||experience.active)return;
   const action=nearestWorldAction();
   if(action){if(action.destination)travelTo(action.destination);else if(action.line){readScene();soundscape.cue('bell');}return;}
   if (currentZone==='registry' && distanceXZ(player, clerk) < 3.4 && !registered) {
-    registered = true; currentTicket = Math.max(1, Number(room?.state?.players?.get(localSessionId)?.ticket ?? 1));
-    $('ticket-number').textContent = String(currentTicket).padStart(3, '0'); $('hud-ticket-number').textContent = String(currentTicket).padStart(3, '0');
-    $('registration-card').classList.remove('hidden'); $('spirit-name').textContent = `Linh hồn #${String(currentTicket).padStart(3, '0')}`;
-    subtitles.clear(); showToast('Đã ghi danh. Bạn có thể tự do tham quan.');
-    if (room) room.send('register', {});
-    if (audioEnabled) playEffect('stamp');
+    openRegistration();
   } else if (distanceXZ(player, guide) < 3.5) {
-    greetActor(guide);
-    const floor=FLOORS[Number(currentZone.replace('floor-',''))-1];
-    showGuide(floor?.joke??(registered ? 'Đi thẳng theo đường đá tới Chính Điện, hoặc dùng nút Chính điện phía trên nhé!' : 'Xin mời ghi danh trước… quầy nằm bên trái đường đá.'));
-    if (audioEnabled) playEffect('bell');
+    talkToGuide();
   } else if (currentZone==='registry' && distanceXZ(player, clerk) < 3.5) {
     showGuide('Xếp hàng giúp tôi một chút. Sổ này… hơi dài.');
   } else {
@@ -407,6 +490,12 @@ async function connectRoom() {
     const client = new Client(endpoint);
     room = await client.joinOrCreate('underworld_hall'); localSessionId = room.sessionId;
     room.onMessage('registry:registered',()=>{});
+    room.onMessage('registry:response',(response:{registered:boolean;name?:string;ticket?:number;reason?:string})=>{
+      window.clearTimeout(registrationTimer);registrationPending=false;($('registration-submit') as HTMLButtonElement).disabled=false;
+      if(!response.registered){$('registration-error').textContent=response.reason??'Chưa thể ghi danh, thử lại nhé.';return;}
+      const showCard=!registered||registrationOpen;acceptRegistration(response.name??spiritName,response.ticket??currentTicket,showCard);
+      if(currentZone!=='registry'){sendRoom('zone',{zone:currentZone});sendRoom('chaos:sync');}
+    });
     room.onMessage('presence:count',()=>updateOnlineCount());
     room.onMessage('chaos:event',(m:{event:ChaosEvent;serverNow:number})=>receiveChaos(m.event,m.serverNow));
     room.onMessage('chaos:snapshot',(m:{zone:string;events:ChaosEvent[];serverNow:number})=>{if(m.zone===currentZone)for(const e of m.events)receiveChaos(e,m.serverNow,true);});
@@ -423,6 +512,7 @@ async function connectRoom() {
     callbacks.onAdd('players', (state: RemotePlayerState, sessionId: string) => {
       if (sessionId === localSessionId) { currentTicket = state.ticket; callbacks.listen(state, 'ticket', (ticket: number) => { currentTicket = ticket; if (registered) { $('ticket-number').textContent = String(ticket).padStart(3, '0'); $('hud-ticket-number').textContent = String(ticket).padStart(3, '0'); } }); return; }
       const avatar = makeSpirit(0x80d8d8, true); avatar.scale.setScalar(.92); scene.add(avatar);
+      avatar.userData.spiritName=state.name||`Vong #${state.ticket}`;callbacks.listen(state,'name',(name:string)=>{avatar.userData.spiritName=name;});
       remotes.set(sessionId, { root: avatar, target: new THREE.Vector3(state.x, state.y??0, state.z), yaw: state.yaw, moving: state.moving,zone:state.zone??'registry',rotation:new THREE.Quaternion(),scale:new THREE.Vector3(1,1,1),clip:state.clip??'',mode:state.experienceStage??'',stageTime:state.stageTime??-1,renderTime:state.stageTime??-1,escortTarget:new THREE.Vector3(state.escortX??0,0,state.escortZ??0),escortYaw:state.escortYaw??0,escortMoving:state.escortMoving??false,escortClip:state.escortClip??'' });
       const updatePose=()=>{const r=remotes.get(sessionId);if(!r)return;r.target.y=state.y??0;r.rotation.setFromEuler(new THREE.Euler(state.pitch??0,state.yaw??0,state.roll??0));r.scale.set(state.sx??1,state.sy??1,state.sz??1);r.clip=state.clip??'';r.mode=state.experienceStage??'';r.stageTime=state.stageTime??-1;r.escortTarget.set(state.escortX??0,0,state.escortZ??0);r.escortYaw=state.escortYaw??0;r.escortMoving=state.escortMoving??false;r.escortClip=state.escortClip??'';};updatePose();
       for(const field of ['y','pitch','roll','sx','sy','sz','clip','experienceStage','stageTime','escortX','escortZ','escortYaw','escortMoving','escortClip'])callbacks.listen(state,field,updatePose);
@@ -431,10 +521,12 @@ async function connectRoom() {
       callbacks.listen(state, 'z', (z: number) => { const remote = remotes.get(sessionId); if (remote) remote.target.z = z; });
       callbacks.listen(state, 'yaw', (yaw: number) => { const remote = remotes.get(sessionId); if (remote) remote.yaw = yaw;updatePose(); });
       callbacks.listen(state, 'moving', (value: boolean) => { const remote = remotes.get(sessionId); if (remote) remote.moving = value; });
+      rebuildWorldUI();
       updateOnlineCount();
     });
-    callbacks.onRemove('players', (_state: unknown, sessionId: string) => { const remote = remotes.get(sessionId); if (remote){cleanupActor(remote.root);scene.remove(remote.root);if(remote.escort){cleanupActor(remote.escort);remote.escort.removeFromParent();}} remotes.delete(sessionId); updateOnlineCount(); });
-    room.onLeave(() => {room=undefined;activeVisit?.chaos?.clear();if(experienceRequested)stopExperience();$('online-count').textContent = 'Đã mất kết nối'; });
+    callbacks.onRemove('players', (_state: unknown, sessionId: string) => { const remote = remotes.get(sessionId); if (remote){cleanupActor(remote.root);scene.remove(remote.root);if(remote.escort){cleanupActor(remote.escort);remote.escort.removeFromParent();}} remotes.delete(sessionId);worldUI.remove(`name-${sessionId}`);updateOnlineCount(); });
+    room.onLeave(() => {room=undefined;activeVisit?.chaos?.clear();if(experienceRequested)stopExperience();if(registrationPending){registrationPending=false;window.clearTimeout(registrationTimer);acceptRegistration(spiritName,Math.max(1,currentTicket));}$('online-count').textContent = 'Đang ở một mình'; });
+    if(registered)sendRoom('register',{name:spiritName});
     $('online-count').textContent = `${room.state.players.size} hồn đang chờ`;
   } catch (error) {
     console.warn('Colyseus room not available yet:', error);
@@ -443,33 +535,22 @@ async function connectRoom() {
 }
 function updateOnlineCount() { if (room?.state?.players) $('online-count').textContent = `${room.state.players.size} hồn đang chờ`; }
 void connectRoom();
+rebuildWorldUI();
 
 let networkTimer = 0;
 function tick() {
   requestAnimationFrame(tick);
-  const dt = Math.min(clock.getDelta(), .04); const elapsed = clock.elapsedTime;
-  // Smooth local movement using a shared frame delta.
+  const dt = Math.min(clock.getDelta(), .05); const elapsed = clock.elapsedTime;
   const dir = new THREE.Vector3();
-  if (keys.has('KeyW') || keys.has('ArrowUp') || keys.has('touch-forward')) dir.z -= 1;
-  if (keys.has('KeyS') || keys.has('ArrowDown') || keys.has('touch-back')) dir.z += 1;
-  if (keys.has('KeyA') || keys.has('ArrowLeft') || keys.has('touch-left')) dir.x -= 1;
-  if (keys.has('KeyD') || keys.has('ArrowRight') || keys.has('touch-right')) dir.x += 1;
-  if(!entered||mapOpen||experience.active)dir.set(0,0,0);
-  const moving = dir.lengthSq() > 0;
-  if (moving) {
-    dir.normalize().applyAxisAngle(new THREE.Vector3(0, 1, 0), cameraYaw);
-    const speed = keys.has('ShiftLeft') || keys.has('ShiftRight') ? 4.25 : 2.65;
-    velocity.lerp(dir.multiplyScalar(speed), 1 - Math.exp(-8.5 * dt));
-  } else velocity.lerp(new THREE.Vector3(), 1 - Math.exp(-7 * dt));
-  const oldX=player.position.x,oldZ=player.position.z;
-  const bounds=activeVisit?.bounds??{x:15,minZ:-40,maxZ:9};
-  const wasInsideStage=Boolean(activeVisit?.obstacles.some(o=>o.containsPoint(player.position)));
-  if(!experience.active){
-    player.position.x=THREE.MathUtils.clamp(oldX+velocity.x*dt,-bounds.x,bounds.x);
-    if(!chaosMode&&!wasInsideStage&&activeVisit?.obstacles.some(o=>o.containsPoint(player.position)))player.position.x=oldX;
-    player.position.z=THREE.MathUtils.clamp(oldZ+velocity.z*dt,bounds.minZ,bounds.maxZ);
-    if(!chaosMode&&!wasInsideStage&&activeVisit?.obstacles.some(o=>o.containsPoint(player.position)))player.position.z=oldZ;
-  }
+  if (keys.has('KeyW') || keys.has('ArrowUp')) dir.z -= 1;
+  if (keys.has('KeyS') || keys.has('ArrowDown')) dir.z += 1;
+  if (keys.has('KeyA') || keys.has('ArrowLeft')) dir.x -= 1;
+  if (keys.has('KeyD') || keys.has('ArrowRight')) dir.x += 1;
+  const blocked=!entered||mapOpen||registrationOpen||experience.active||travelling;
+  if(blocked)navigator.cancel();
+  const moving=!blocked&&navigator.step(player.position,dt,dir,keys.has('ShiftLeft')||keys.has('ShiftRight')?4.25:3.05);
+  const destination=navigator.destination;destinationMarker.visible=Boolean(destination)&&!blocked;
+  if(destination){destinationMarker.position.set(destination.x,activeVisit?.obstacles.some(b=>b.containsPoint(destination))?.5:.06,destination.z);destinationMarker.scale.setScalar(1+Math.sin(elapsed*5)*.08);}
   if (velocity.lengthSq() > .035) {
     const angle = Math.atan2(velocity.x, velocity.z);
     player.rotation.y += Math.atan2(Math.sin(angle-player.rotation.y), Math.cos(angle-player.rotation.y)) * (1-Math.exp(-10*dt));
@@ -507,35 +588,43 @@ function tick() {
   else if(localEmote&&localEmote.until>Date.now()){player.userData.performanceClip=localEmote.kind==='pants'?'pull':'pound';performActor(player,(.65-(localEmote.until-Date.now())/1000)*1.8);}
   if(entered)soundscape.tick(elapsed,player.position.x,player.position.z,activeVisit?.animationTime??elapsed);
   activeVisit?.root.traverse(o=>{if(o.userData.isActor)performActor(o as THREE.Group,o.userData.chaosReaction?elapsed:activeVisit?.animationTime??elapsed);});
+  activeVisit?.finishFrame();
   if(currentZone==='registry')performActor(clerk,elapsed);
   refreshChaosUI();
-  const cameraOffset = new THREE.Vector3(0, 2.4 + cameraPitch * 3, 6.7).applyAxisAngle(new THREE.Vector3(0, 1, 0), cameraYaw);
-  const cameraTarget = cameraOffset.add(player.position);
-  const shot=experience.cameraHint();camera.position.lerp(shot?.position??cameraTarget, 1 - Math.exp(-3.5 * dt));
-  cameraLookTarget.lerp(shot?.target??new THREE.Vector3(player.position.x,1.15,player.position.z),1-Math.exp(-6*dt));camera.lookAt(cameraLookTarget);
-  // Apply a bounded view rotation after camera smoothing so the impact remains crisp.
-  if(currentZone==='floor-11'&&activeVisit){const hit=stoneCameraShake(activeVisit.animationTime).multiplyScalar(Math.max(0,1-Math.hypot(player.position.x,player.position.z+5.55)/14));camera.rotateX(hit.y*.25);camera.rotateY(hit.x*.25);camera.rotateZ(hit.z*.15);}
-  const nearClerk = currentZone==='registry'&&distanceXZ(player, clerk) < 3.4, nearGuide = distanceXZ(player, guide) < 3.5,worldAction=nearestWorldAction();
-  if (entered && !mapOpen && !experience.active && (nearClerk || nearGuide||worldAction)) { $('interaction-label').textContent = worldAction?.label??(nearClerk && !registered ? 'Ghi danh' : 'Nói chuyện'); $('interaction').classList.remove('hidden'); } else $('interaction').classList.add('hidden');
+  const shot=['positioning','performing'].includes(experience.phase)?experience.cameraHint():undefined;
+  cameraRig.update(camera,player.position,dt,shot);
+  worldUI.update(camera,player.position,gameScreen.size.width,gameScreen.size.height,entered&&!mapOpen&&!registrationOpen&&!experience.active&&!travelling&&!document.body.classList.contains('film-expanded')&&(!gameScreen.compact||!subtitles.visible),gameScreen.blocked);
   networkTimer += dt;
   if (room && entered && networkTimer > .05) {const escort=experience.escortPose();sendRoom('move', { x: player.position.x, z: player.position.z, yaw: player.rotation.y, moving:experience.active?['escorting','returning'].includes(experience.phase):moving,y:player.position.y,pitch:player.rotation.x,roll:player.rotation.z,sx:player.scale.x,sy:player.scale.y,sz:player.scale.z,clip:player.userData.performanceClip??'',stage:experience.active?experience.phase:'',stageTime:player.userData.stageTime??-1,escortX:escort?.position.x??0,escortZ:escort?.position.z??0,escortYaw:escort?.yaw??0,escortMoving:escort?.moving??false,escortClip:escort?.clip??'' }); networkTimer = 0; }
   renderer.render(scene, camera);
 }
 tick();
 
-window.addEventListener('keydown', (event) => { if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.code)) event.preventDefault(); keys.add(event.code); if (event.code === 'KeyE' && !event.repeat) interact(); if(!event.repeat&&!event.ctrlKey&&!event.metaKey&&!event.altKey&&chaosMode){const action=({KeyF:'hit',KeyG:'smash',KeyR:'pants'} as const)[event.code as 'KeyF'|'KeyG'|'KeyR'];if(action){event.preventDefault();doChaos(action);}} });
-window.addEventListener('keyup', (event) => keys.delete(event.code));
-canvas.addEventListener('pointerdown', (event) => { dragging = true; lastPointerX = event.clientX; lastPointerY = event.clientY; canvas.setPointerCapture(event.pointerId); });
-canvas.addEventListener('pointermove', (event) => { if (!dragging||experience.active) return; cameraYaw += (event.clientX - lastPointerX) * .004; cameraPitch = THREE.MathUtils.clamp(cameraPitch + (event.clientY - lastPointerY) * .002, -.5, .8); lastPointerX = event.clientX; lastPointerY = event.clientY; });
-canvas.addEventListener('pointerup', () => { dragging = false; });
-$('enter-button').addEventListener('click', async () => { entered = true; document.body.classList.add('playing');$('intro').classList.add('dismiss'); $('travel-nav').classList.remove('hidden');$('hud').classList.remove('hidden'); $('mobile-controls').classList.remove('hidden');subtitles.show(zoneDialogue('registry'));if(!audioPreferenceChosen)await ensureAudio();startAmbient('registry');soundscape.setZone('registry'); });
-$('close-card').addEventListener('click', () => { $('registration-card').classList.add('hidden'); $('hud').classList.remove('hidden'); $('mobile-controls').classList.remove('hidden'); });
-$('mobile-interact').addEventListener('click', interact);
-document.querySelectorAll<HTMLButtonElement>('[data-dir]').forEach((button) => {
-  const key = `touch-${button.dataset.dir}`;
-  button.addEventListener('pointerdown', (e) => { e.preventDefault(); keys.add(key); });
-  for (const type of ['pointerup', 'pointerleave', 'pointercancel']) button.addEventListener(type, () => keys.delete(key));
+function tapWorld(event:PointerEvent){
+  if(!entered||travelling||mapOpen||registrationOpen||experience.active)return;
+  const rect=canvas.getBoundingClientRect(),point=new THREE.Vector2((event.clientX-rect.left)/rect.width*2-1,-(event.clientY-rect.top)/rect.height*2+1);
+  pointerRay.setFromCamera(point,camera);const picked=worldUI.pick(pointerRay);
+  if(picked){activateHotspot(picked.definition,picked.button);return;}
+  const destination=pointerRay.ray.intersectPlane(groundPlane,new THREE.Vector3());if(!destination)return;
+  subtitles.clear();$('registration-card').classList.add('hidden');keys.clear();
+  if(!navigator.go(player.position,destination))showToast('Chỗ này chưa có lối đi. Bấm một điểm khác nhé.');
+}
+let pointerDown:{id:number;x:number;y:number;touch:boolean;moved:boolean}|undefined;
+canvas.addEventListener('pointerdown',event=>{if(!event.isPrimary||event.button!==0)return;pointerDown={id:event.pointerId,x:event.clientX,y:event.clientY,touch:event.pointerType!=='mouse',moved:false};canvas.setPointerCapture(event.pointerId);});
+canvas.addEventListener('pointermove',event=>{if(pointerDown?.id===event.pointerId&&!isWorldTap(pointerDown,{x:event.clientX,y:event.clientY},pointerDown.touch))pointerDown.moved=true;});
+canvas.addEventListener('pointerup',event=>{const start=pointerDown;pointerDown=undefined;if(canvas.hasPointerCapture(event.pointerId))canvas.releasePointerCapture(event.pointerId);if(start?.id===event.pointerId&&!start.moved&&isWorldTap(start,{x:event.clientX,y:event.clientY},start.touch))tapWorld(event);});
+canvas.addEventListener('pointercancel',()=>{pointerDown=undefined;});
+window.addEventListener('keydown',event=>{
+  if(event.code==='Escape'){expandFilm(false);closeRegistration();navigator.cancel();setChaosMode(false);stopExperience();closeMap();subtitles.clear();return;}
+  const element=event.target as HTMLElement|null;
+  if(registrationOpen||element?.closest('input,textarea,select,[contenteditable=true]'))return;
+  if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(event.code))event.preventDefault();keys.add(event.code);
+  if(event.code==='KeyE'&&!event.repeat)interact();
+  if(event.code==='Space'&&!event.repeat&&subtitles.visible&&!element?.closest('button,a')){event.preventDefault();subtitles.next();}
+  if(!event.repeat&&!event.ctrlKey&&!event.metaKey&&!event.altKey&&chaosMode){const action=({KeyF:'hit',KeyG:'smash',KeyR:'pants'} as const)[event.code as 'KeyF'|'KeyG'|'KeyR'];if(action){event.preventDefault();doChaos(action);}}
 });
-window.addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setPixelRatio(Math.min(devicePixelRatio, 1.7)); renderer.setSize(innerWidth, innerHeight); });
-window.addEventListener('blur',()=>keys.clear());
-window.addEventListener('keydown',e=>{if(e.code==='Escape'){setChaosMode(false);stopExperience();closeMap();subtitles.clear();}if(e.code==='Space'&&!e.repeat&&subtitles.visible){e.preventDefault();subtitles.next();}});
+window.addEventListener('keyup',event=>keys.delete(event.code));
+$('enter-button').addEventListener('click',async()=>{entered=true;cameraRig.reset(player.position);document.body.classList.add('playing');$('intro').classList.add('dismiss');$('travel-nav').classList.remove('hidden');$('hud').classList.remove('hidden');subtitles.show(zoneDialogue('registry'));if(!audioPreferenceChosen)await ensureAudio();startAmbient('registry');soundscape.setZone('registry');});
+$('close-card').addEventListener('click',()=>{$('registration-card').classList.add('hidden');$('hud').classList.remove('hidden');});
+const fitRegistration=()=>{$('registration-dialog').style.setProperty('--dialog-height',`${window.visualViewport?.height??innerHeight}px`);};window.visualViewport?.addEventListener('resize',fitRegistration);fitRegistration();
+window.addEventListener('blur',()=>{keys.clear();navigator.cancel();pointerDown=undefined;});

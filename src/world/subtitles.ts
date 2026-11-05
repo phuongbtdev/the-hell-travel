@@ -33,6 +33,7 @@ export class Subtitles {
   clear(){this.pages=[];this.index=0;this.render();}
   private render(){
     const e=this.elements,line=this.pages[this.index];
+    document.body.classList.toggle('dialogue-open',Boolean(line));
     e.panel.classList.toggle('hidden',!line);e.panel.setAttribute('aria-hidden',String(!line));
     e.panel.inert=!line;
     if(line){e.speaker.textContent=SPEAKER_NAMES[line.speaker];e.text.textContent=line.text;e.progress.textContent=`${this.index+1} / ${this.pages.length}`;e.previous.disabled=this.index===0;e.next.textContent=this.index===this.pages.length-1?'Đóng':'Tiếp tục →';e.text.scrollTop=0;}
