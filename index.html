@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="theme-color" content="#101820" />
+    <meta name="description" content="Một chuyến tham quan 3D huyền bí qua 18 tầng địa ngục dân gian." />
+    <title>18 Tầng Địa Ngục — Cửa Tiếp Dẫn</title>
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="world" aria-label="Thế giới 3D âm phủ"></canvas>
+      <div class="vignette"></div>
+      <header class="topbar">
+        <a class="brand" href="#" aria-label="Cửa Tiếp Dẫn"><span class="brand-mark">18</span><span><b id="zone-name">CỬA TIẾP DẪN</b><small id="zone-subtitle">ÂM PHỦ · KHU GHI DANH</small></span></a>
+        <div class="presence"><i></i><span id="online-count">Đang kết nối…</span></div>
+        <button class="icon-button sound-toggle" id="sound-toggle" title="Bật hoặc tắt âm thanh" aria-label="Bật hoặc tắt âm thanh">♫</button>
+      </header>
+      <main class="intro" id="intro">
+        <p class="eyebrow"><span></span> PHIẾU TIẾP NHẬN LINH HỒN</p>
+        <h1>Hồn mới<br /><em>đến ghi danh.</em></h1>
+        <p class="lead">Xếp hàng nhận thẻ. Trong lúc chờ gọi tên, cứ tự do dạo quanh Cửa Tiếp Dẫn.</p>
+        <button class="primary-button" id="enter-button"><span>✦</span> NHẬN SỐ THỨ TỰ <b>→</b></button>
+        <div class="quiet-note">CHUYẾN THAM QUAN 18 TẦNG · ĐI ĐÂU CŨNG ĐƯỢC</div>
+      </main>
+      <section class="registration-card hidden" id="registration-card">
+        <div class="stamp">ĐÃ<br />GHI<br />DANH</div>
+        <p class="eyebrow">THẺ HỒN TẠM THỜI</p>
+        <h2 id="spirit-name">Khách vô danh</h2>
+        <div class="ticket-row"><span>SỐ THỨ TỰ</span><strong id="ticket-number">—</strong></div>
+        <p class="card-note">Trong lúc chờ xét gọi, bạn được tự do tham quan. Tiểu Sai đang đứng gần cổng.</p>
+        <button class="text-button" id="close-card">CẤT THẺ <span>×</span></button>
+      </section>
+      <aside class="guide-bubble hidden" id="guide-bubble" aria-label="Phụ đề đối thoại" aria-hidden="true">
+        <div class="subtitle-heading"><strong id="subtitle-speaker">Tiểu Sai</strong><button id="subtitle-close" aria-label="Đóng phụ đề">×</button></div>
+        <p id="guide-line" aria-live="polite"></p>
+        <div class="subtitle-controls"><span id="subtitle-progress"></span><span class="subtitle-hint">Phím cách để tiếp tục</span><button id="subtitle-previous" aria-label="Câu trước">←</button><button id="subtitle-next">Tiếp tục →</button></div>
+      </aside>
+      <nav class="travel-nav hidden" id="travel-nav" aria-label="Đi lại trong âm phủ"><button id="go-registry">Cửa tiếp dẫn</button><button id="go-hall">Chính điện</button><button id="open-map">Bản đồ 18 tầng ↗</button></nav>
+      <section class="zone-description hidden" id="zone-description"><span id="zone-number">CHÍNH ĐIỆN</span><h2 id="zone-title">Điện xét xử</h2><p id="zone-story">Bẩm Diêm Vương, nhận thẻ và chọn cổng tham quan.</p><button id="toggle-chaos" hidden aria-pressed="false">Đại náo tầng này</button><button id="experience-punishment" hidden>Trải nghiệm hình phạt</button><button id="read-story">Xem Diêm Vương phán</button></section>
+      <section id="chaos-panel" class="chaos-panel" hidden aria-label="Đại náo"><header><strong>ĐẠI NÁO ÂM PHỦ</strong><button id="close-chaos" aria-label="Dừng đại náo">×</button></header><p id="chaos-target">Tới gần quỷ sai hoặc đạo cụ để chọc phá.</p><div class="chaos-actions"><button id="chaos-hit"><kbd>F</kbd> Đánh quỷ sai</button><button id="chaos-smash"><kbd>G</kbd> Phá đồ</button><button id="chaos-pants"><kbd>R</kbd> Kéo quần</button></div><div class="chaos-heat"><progress id="chaos-heat" max="5" value="0" aria-label="Độ quậy"></progress><span id="chaos-heat-label">Chưa bị để ý</span></div><small id="chaos-note">Đi vào sân khấu, lại gần mục tiêu rồi ra tay.</small></section>
+      <section class="experience-status hidden" id="experience-status" aria-label="Trải nghiệm hình phạt"><div><strong id="experience-phase">Quỷ sai đang đến đón</strong><span id="experience-time"></span></div><button id="stop-experience">Dừng · Esc</button></section>
+      <section class="floor-cinema hidden" id="floor-cinema"><header><span>GÓC DIỄN CẬN CẢNH</span><button id="expand-film" aria-label="Phóng to video">↗</button></header><video id="scene-film" muted loop playsinline controls preload="none" aria-label="Video màn diễn của tầng hiện tại"></video></section>
+      <section class="map-panel hidden" id="map-panel" role="dialog" aria-label="Bản đồ 18 tầng"><header><div><p>THẺ THAM QUAN ÂM PHỦ</p><h2>Thập bát địa ngục</h2><small id="visit-progress">Đã đến 0 / 18 tầng</small></div><button id="close-map" aria-label="Đóng bản đồ">×</button></header><p class="map-hint">Chọn một tầng để đi qua cổng. Bạn có thể tự do quay lại bất cứ lúc nào.</p><div id="floor-list"></div></section>
+      <div id="scene-fade"></div>
+      <div class="hud hidden" id="hud">
+        <div class="hud-ticket"><span>THẺ HỒN</span><b id="hud-ticket-number">—</b></div>
+        <div class="hud-help"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> DI CHUYỂN <span>·</span> KÉO CHUỘT XOAY GÓC NHÌN</div>
+        <button id="sound-hud" aria-label="Tắt âm thanh">♫</button>
+      </div>
+      <div class="interaction hidden" id="interaction"><kbd>E</kbd><span id="interaction-label">Nói chuyện</span></div>
+      <div class="toast" id="toast" role="status"></div>
+      <div class="mobile-controls hidden" id="mobile-controls">
+        <div class="dpad"><button data-dir="forward">▲</button><div><button data-dir="left">◀</button><button data-dir="back">▼</button><button data-dir="right">▶</button></div></div>
+        <button class="mobile-action" id="mobile-interact">E</button>
+      </div>
+      <footer class="footer"><span>THẺ THAM QUAN CÓ HIỆU LỰC ĐẾN KHI ĐƯỢC GỌI TÊN</span><span>✦</span></footer>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
